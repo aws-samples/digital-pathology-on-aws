@@ -124,10 +124,10 @@ Parameters:
     Default: 10240
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
   ExistingRoute53HostedZoneId:
-    Description: Existing HostedZone for Registered Domain used for ACM Certificate
+    Description: Existing HostedZone for Registered Domain used to validate SSL Certificate 
     Type: AWS::Route53::HostedZone::Id
   Route53FullDomainName:
-    Description: Enter the Fully Qualified Domain Nanme for ACM Certificate 
+    Description: Enter the Fully Qualified Domain Name to validate SSL Certificate 
     Type: String
 
 Resources:
