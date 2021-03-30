@@ -13,7 +13,7 @@ The diagram of Architecture is here:
 
 First create the network infrastructure. One way to do it is to deploy using [this CloudFormation template](https://docs.aws.amazon.com/codebuild/latest/userguide/cloudformation-vpc-template.html), which will create one [AWS VPC](https://aws.amazon.com/vpc/), two public subnets and two private subnets. If you want to add [VPC flow logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html), you can deploy [the network infrastructure CloudFormation template](https://github.com/aws-samples/digital-pathology-on-aws/blob/main/OMERO-cloudformation-templates/OMERONetworkInfra.yaml) in this repository and select true for AddVPCFlowLog parameter.
 
-[Optional] If you have registered or transfer your domain to AWS Route53, you can use the associated Hosted zones to [automate the DNS validatition for the SSL certificate](https://aws.amazon.com/blogs/security/how-to-use-aws-certificate-manager-with-aws-cloudformation/) issued by [AWS Certificate Manager](https://aws.amazon.com/certificate-manager/). This DNS validated public certificate can be used for [TLS termination for Network Load Balancer](https://aws.amazon.com/blogs/aws/new-tls-termination-for-network-load-balancers/)
+[Optional] If you have registered or transfer your domain to AWS Route53, you can use the associated Hosted zones to [automate the DNS validatition for the SSL certificate](https://aws.amazon.com/blogs/security/how-to-use-aws-certificate-manager-with-aws-cloudformation/) issued by [AWS Certificate Manager (ACM)](https://aws.amazon.com/certificate-manager/). It is noteworthy the Route53 domain and associated public Hosted zone should be on the same AWS account as the ACM that issues SSL certificate, in order to automate the DNS validation. ACM will create a validation CNAME record in the public Hosted zone. This DNS validated public certificate can be used for [TLS termination for Network Load Balancer](https://aws.amazon.com/blogs/aws/new-tls-termination-for-network-load-balancers/)
 
 
 #### Deploy OMERO Stack
@@ -21,7 +21,7 @@ First create the network infrastructure. One way to do it is to deploy using [th
 Next the OMERO stack can be deployed using this 1-click deployment:  
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackFargateTLS_RW.yml)
 
-which will deploy two nested CloudFormation templates, one for storage (EFS and RDS) and one for ECS containers (OMERO web and server). It also deploys a certificate for TLS termination at Network Load Balancer. Majority of parameters already have default values filled and subject to be customized. VPC and Subnets are required, which are from previous deployment. It also requires the Hosted Zone ID and fully qualifed domain name in [AWS Route53](https://aws.amazon.com/route53/), which will be used to validate SSL Certificate issued by [AWS Certificate Manager](https://aws.amazon.com/certificate-manager/).
+which will deploy two nested CloudFormation templates, one for storage (EFS and RDS) and one for ECS containers (OMERO web and server). It also deploys a certificate for TLS termination at Network Load Balancer. Majority of parameters already have default values filled and subject to be customized. VPC and Subnets are required, which are from previous deployment. It also requires the Hosted Zone ID and fully qualifed domain name in [AWS Route53](https://aws.amazon.com/route53/), which will be used to validate SSL Certificate issued by [AWS ACM](https://aws.amazon.com/certificate-manager/).
 
 If you want to connect to the instance that host the OMERO server container and run omero client CLI to import images on that instance, you can deploy the OMERO server container on ECS EC2 instance using 1-click deployment:  
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackTLS_RW.yml)
@@ -63,8 +63,8 @@ or you can run OMERO server on ECS EC2 instance using this 1-click deployment:
 
 #### Clean up the deployed stack
 
-1. If you deployed with SSL certificate, go to the HostedZone in Route53 and remove the validation record.
-2. Empty the S3 bucket for Load Balancer access log (LBAccessLogBucket) before deleting the OMERO stack
+1. If you deployed with SSL certificate, go to the HostedZone in Route53 and remove the validation record that route traffic to _xxxxxxxx.xxxxxxxx.acm-validations.aws.
+2. Empty and delete the S3 bucket for Load Balancer access log (LBAccessLogBucket in the template) before deleting the OMERO stack
 3. Manually delete the EFS file system and RDS database. By default the storage retain after the CloudFormation stack is deleted.
 
 
