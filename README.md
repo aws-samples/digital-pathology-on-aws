@@ -54,6 +54,12 @@ or you can run OMERO server on ECS EC2 instance using this 1-click deployment:
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstack_RW.yml)
 
 
+To clean up the deployed stack:
+1. If you deployed with SSL certificate, go to the HostedZone in Route53 and remove the validation record.
+2. Empty the S3 bucket for Load Balancer access log (LBAccessLogBucket) before deleting the OMERO stack
+3. Manually delete the EFS file system and RDS database since by default they retain after the CloudFormation stack is deleted
+
+
 The following information was used to build this solution:
 1. [OMERO Docker](https://github.com/ome/docker-example-omero)
 2. [OMERO deployment examples](https://github.com/ome/omero-deployment-examples)
