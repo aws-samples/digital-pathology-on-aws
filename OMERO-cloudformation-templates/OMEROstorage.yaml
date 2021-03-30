@@ -1,0 +1,209 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  VPCID:
+    Description: ID of the VPC
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnet1Id:
+    Description: SubnetId, for Availability Zone 1 in the region in your VPC
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnet2Id:
+    Description: SubnetId, for Availability Zone 2 in the region in your VPC
+    Type: AWS::EC2::Subnet::Id
+  IsDBMultiAZ:
+    Type: String
+    Default: False
+  CIDRblock4OMEROSecurityGroup:
+    Type: String
+    Default: '0.0.0.0/0'
+  EFSNameTag:
+    Description: The name of the EFS volume
+    Type: String
+    MinLength: '1'
+    Default: OMEROEFSvolume
+  EnableEFSBackup:
+    Type: String
+    Description: whether enable EFS backup or not. EFS backup has extra associated cost.
+    Default: ENABLED
+    AllowedValues: [ENABLED, DISABLED]
+  EFSStorageInfrequentAcessAfter:
+    Type: String
+    Description: A value that describes the period of time that a file is not accessed, after which it transitions to the IA storage class.
+    Default: AFTER_90_DAYS
+    AllowedValues: [AFTER_14_DAYS, AFTER_30_DAYS, AFTER_60_DAYS, AFTER_7_DAYS, AFTER_90_DAYS]
+  RDSDBInstanceClass:
+    Type: String
+    Default: "db.t3.medium"
+  RDSDBStorageType:
+    Type: String
+    Default: "gp2"
+  RDSDBAllocatedStorage:
+    Type: Number
+    Default: 20
+  DBUser:
+    Type: String
+    Default: omero
+    Description: OMERO Database User
+    NoEcho: true
+  RDSDBBackupRetentionDays:
+    Type: Number
+    Default: 30
+    Description: The number of days for which automated backups are retained. Setting this parameter to a positive number (from 1 to 35) enables backups. Setting this parameter to 0 disables automated backups. 
+
+Resources:
+  RDSDatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: RDSDatabaseSecret
+      Description: !Join ['', ['RDS Database Master User Secret ', 'for CloudFormation Stack ', !Ref 'AWS::StackName']]
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+      GenerateSecretString:
+        SecretStringTemplate: !Join ['', ['{"username": "', !Ref DBUser, '"}']]
+        GenerateStringKey: "password"
+        ExcludeCharacters: '"@/\'
+        PasswordLength: 16
+  SMSecretRDSDBAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref RDSDatabaseSecret
+      TargetId: !Ref RDSInstance
+      TargetType: AWS::RDS::DBInstance
+  OmeroSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: OMERO Security Group
+      GroupName: OmeroSecurityGroup
+      SecurityGroupIngress:
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroserver:4063/tcp
+          FromPort: 4063
+          IpProtocol: TCP
+          ToPort: 4063
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroserver:4064/tcp
+          FromPort: 4064
+          IpProtocol: TCP
+          ToPort: 4064
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: ssh
+          FromPort: 22
+          IpProtocol: TCP
+          ToPort: 22
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroweb:4080/tcp
+          FromPort: 4080
+          IpProtocol: TCP
+          ToPort: 4080
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroweb:443/https
+          FromPort: 443
+          IpProtocol: TCP
+          ToPort: 443
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: network
+          Value: omero
+      VpcId: !Ref VPCID
+  OmeroSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow communication within omero network
+      GroupId: !Ref OmeroSecurityGroup
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref OmeroSecurityGroup
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS Security Group
+      GroupName: RDSSecurityGroup
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !Ref OmeroSecurityGroup
+          Description: postgres:5432/tcp
+          FromPort: 5432
+          IpProtocol: TCP
+          ToPort: 5432
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: network
+          Value: rds
+      VpcId: !Ref VPCID
+  EFSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EFS Security Group
+      GroupName: EFSSecurityGroup
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !Ref OmeroSecurityGroup
+          Description: efs:4063/tcp
+          FromPort: 2049
+          IpProtocol: TCP
+          ToPort: 2049
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: network
+          Value: efs
+      VpcId: !Ref VPCID
+
+  FileSystem:
+    Type: AWS::EFS::FileSystem
+    DeletionPolicy: Retain       ## or Delete/Snapshot
+    Properties:
+      Encrypted: True
+      BackupPolicy: 
+        Status: !Ref EnableEFSBackup
+      LifecyclePolicies:
+        - TransitionToIA: !Ref EFSStorageInfrequentAcessAfter
+      FileSystemTags:
+        - Key: Name
+          Value: !Ref 'EFSNameTag'
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: DBSubnetGroup for RDS instances
+      SubnetIds:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Retain        ## or Delete/Snapshot
+    Properties:
+      DBInstanceIdentifier: omero-instance
+      DBName: omero
+      DBInstanceClass: !Ref RDSDBInstanceClass
+      StorageType: !Ref RDSDBStorageType
+      StorageEncrypted: True
+      AllocatedStorage: !Ref RDSDBAllocatedStorage
+      Engine: postgres
+      EngineVersion: 11
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSDatabaseSecret, ':SecretString:password}}' ]]
+      PubliclyAccessible: False
+      MultiAZ: !Ref IsDBMultiAZ
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+      VPCSecurityGroups: 
+        - !Ref RDSSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      BackupRetentionPeriod: !Ref RDSDBBackupRetentionDays
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+
+Outputs:
+  EFSFileSystemID:
+    Value: !Ref FileSystem
+  OmeroSecurityGroup:
+    Value: !Ref OmeroSecurityGroup
+  EFSSecurityGroup:
+    Value: !Ref EFSSecurityGroup
+  RDSEndpointAddress:
+    Value: !GetAtt 'RDSInstance.Endpoint.Address'
+  RDSDatabaseSecret:
+    Value: !Ref RDSDatabaseSecret
