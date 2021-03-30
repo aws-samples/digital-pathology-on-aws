@@ -56,10 +56,11 @@ or you can run OMERO server on ECS EC2 instance using this 1-click deployment:
 
 The following information was used to build this solution:
 1. [OMERO Docker](https://github.com/ome/docker-example-omero)
-2. [Deploying Docker containers on ECS](https://docs.docker.com/cloud/ecs-integration/)
-1. [Tutorial on EFS for ECS EC2 launch type](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/tutorial-efs-volumes.html).  
-2. [Blog post on EFS for ECS Fargate](https://aws.amazon.com/blogs/aws/amazon-ecs-supports-efs/).  
-3. [Blog post on EFS as Docker volume](https://aws.amazon.com/blogs/compute/amazon-ecs-and-docker-volume-drivers-amazon-ebs/)
+2. [OMERO deployment examples](https://github.com/ome/omero-deployment-examples)
+3. [Deploying Docker containers on ECS](https://docs.docker.com/cloud/ecs-integration/)
+4. [Tutorial on EFS for ECS EC2 launch type](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/tutorial-efs-volumes.html).  
+5. [Blog post on EFS for ECS Fargate](https://aws.amazon.com/blogs/aws/amazon-ecs-supports-efs/).  
+6. [Blog post on EFS as Docker volume](https://aws.amazon.com/blogs/compute/amazon-ecs-and-docker-volume-drivers-amazon-ebs/)
 
 
 
