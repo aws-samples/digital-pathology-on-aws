@@ -29,7 +29,7 @@ If you want to connect to the instance that host the OMERO server container and 
 In this deployment, OMERO server is running on EC2 instance, and everything else is same as earlier CloudFormation template. We have installed [AWS CLI](https://aws.amazon.com/cli/) and [Amazon Corretto 11](https://docs.aws.amazon.com/corretto/latest/corretto-11-ug/what-is-corretto-11.html) on the EC2 instance hosting OMERO server container using [AWS EC2 user data shell scripts](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html). To import microscopic images to OMERO server, you can connect to the EC2 instance using SSH client (login as ec2-user) or Session Manager (login as ssm-user).
 
 
-run the following scripts to install [omero-py](https://docs.openmicroscopy.org/omero/5.6.0/developers/Python.html):  
+Once connected, run the following scripts on the EC2 instance to install [omero-py](https://docs.openmicroscopy.org/omero/5.6.0/developers/Python.html):  
 
 ``` 
 curl -LO https://anaconda.org/anaconda-adam/adam-installer/4.4.0/download/adam-installer-4.4.0-Linux-x86_64.sh  
@@ -50,7 +50,7 @@ and then use [OMERO client CLI](https://docs.openmicroscopy.org/omero/5.6.1/user
 `omero login`  
 
 The omero server container instance has been assigned with a private IP address vis awsvpc network deployment. The IP address can be found on AWS console ECS Cluster => Task => Task detail page:  
-![arch](Figures/omero-server-ip.png)
+![arch](Figures/omero-server-ip.png =200x)
 
 The default port number is 4064, and default username (root) and password (omero) for OMERO are used here.
 
