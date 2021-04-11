@@ -281,8 +281,6 @@ Resources:
   OmeroserverService:
     Type: AWS::ECS::Service
     DependsOn:
-      - OmeroserverTCP4063Listener
-      - OmeroserverTCP4064Listener
       - OmeroserverTaskDefinition
     Properties:
       Cluster: !Ref 'OMEROECSCluster'
@@ -293,13 +291,6 @@ Resources:
         Type: ECS
       DesiredCount: 1
       LaunchType: EC2
-      LoadBalancers:
-        - ContainerName: omeroserver
-          ContainerPort: 4063
-          TargetGroupArn: !Ref 'OmeroserverTCP4063TargetGroup'
-        - ContainerName: omeroserver
-          ContainerPort: 4064
-          TargetGroupArn: !Ref 'OmeroserverTCP4064TargetGroup'
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
@@ -318,54 +309,6 @@ Resources:
           Value: omeroserver
       TaskDefinition: !Ref 'OmeroserverTaskDefinition'
   
-  OmeroserverTCP4063Listener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - ForwardConfig:
-            TargetGroups:
-              - TargetGroupArn: !Ref 'OmeroserverTCP4063TargetGroup'
-          Type: forward
-      LoadBalancerArn: !If
-        - CreateLoadBalancer
-        - !Ref 'OMEROLoadBalancer'
-        - !Ref 'ParameterLoadBalancerARN'
-      Port: 4063
-      Protocol: TCP
-  OmeroserverTCP4063TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Port: 4063
-      Protocol: TCP
-      Tags:
-        - Key: project
-          Value: omero-on-aws
-      TargetType: ip
-      VpcId: !Ref VPCID
-  OmeroserverTCP4064Listener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - ForwardConfig:
-            TargetGroups:
-              - TargetGroupArn: !Ref 'OmeroserverTCP4064TargetGroup'
-          Type: forward
-      LoadBalancerArn: !If
-        - CreateLoadBalancer
-        - !Ref 'OMEROLoadBalancer'
-        - !Ref 'ParameterLoadBalancerARN'
-      Port: 4064
-      Protocol: TCP
-  OmeroserverTCP4064TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Port: 4064
-      Protocol: TCP
-      Tags:
-        - Key: project
-          Value: omero-on-aws
-      TargetType: ip
-      VpcId: !Ref VPCID
   OmeroserverTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -512,6 +455,10 @@ Resources:
           echo ECS_CLUSTER=${OMEROECSCluster} >> /etc/ecs/ecs.config
           yum install -y aws-cfn-bootstrap bzip2 unzip
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
+          yum install java-11-amazon-corretto-headless -y
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  
+          unzip awscliv2.zip  
+          ./aws/install
   EC2Role:
     Type: AWS::IAM::Role
     Properties:
