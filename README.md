@@ -50,7 +50,7 @@ and then use [OMERO client CLI](https://docs.openmicroscopy.org/omero/5.6.1/user
 `omero login`  
 
 The omero server container instance has been assigned with a private IP address vis awsvpc network deployment. The IP address can be found on AWS console ECS Cluster => Task => Task detail page:  
-![arch](Figures/omero-server-ip.png =200x)
+![arch](Figures/omero-server-ip.png|width=200x)
 
 The default port number is 4064, and default username (root) and password (omero) for OMERO are used here.
 
