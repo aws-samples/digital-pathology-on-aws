@@ -202,7 +202,7 @@ Resources:
           Fn::GetAtt: 
           - StorageStack
           - Outputs.OmeroSecurityGroup
-        EFSFileSystem:
+        OmeroFilesystem:
           Fn::GetAtt: 
           - StorageStack
           - Outputs.EFSFileSystemID
