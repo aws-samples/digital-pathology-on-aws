@@ -1,0 +1,949 @@
+AWSTemplateFormatVersion: 2010-09-09
+Conditions:
+  CreateLoadBalancer: !Equals
+    - ''
+    - !Ref 'ParameterLoadBalancerARN'
+Description: CloudFormation template to deploy OMERO Web and Server on AWS ECS
+
+Parameters:
+  ParameterLoadBalancerARN:
+    Description: Name of the LoadBalancer to connect to (optional)
+    Type: String
+  VPCID:
+    Description: ID of the VPC
+    Type: AWS::EC2::VPC::Id
+  PublicSubnet1Id:
+    Description: SubnetId, for Availability Zone 1 in the region in your VPC. The only one OMERO Server instance is deployed in this subnet.
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnet2Id:
+    Description: SubnetId, for Availability Zone 2 in the region in your VPC. None of OMERO Server instance is deployed in this subnet.
+    Type: AWS::EC2::Subnet::Id
+  OmeroSecurityGroup:
+    Description: Security group for OMERO web and service containers
+    Type: AWS::EC2::SecurityGroup::Id 
+  EFSSecurityGroup:
+    Description: Security group for EFS
+    Type: AWS::EC2::SecurityGroup::Id 
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the ECS instances.
+  OmeroFilesystem:
+    Description: The ID of the EFS volume
+    Type: String
+  LBAccessLogBucketName:
+    Type: String
+    Default: ecs-loadbalancer-accesslog
+  RDSEndpointAddress:
+    Type: String
+    Description: The RDS database endpoinst address
+  NumberofWebInstances:
+    Type: Number
+    Default: 2
+  OMEROWebContainerCPU:
+    Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
+    Type: Number
+    Default: 2048
+    AllowedValues: [256, 512, 1024, 2048, 4096]
+  OMEROWebContainerMemory:
+    Description: The amount (in MiB) of memory to present to the container. . Memory should be at least two times of vCPU unit according to documentation.
+    Type: Number
+    Default: 4096
+    AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
+  NumberofEC2Instances:
+    Type: Number
+    Default: 2
+  NumberofReadOnlyServerInstances:
+    Type: Number
+    Default: 1
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: m4.large
+    AllowedValues: [t2.large, m3.large,
+      m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
+      c4.large, c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, c3.large, c3.xlarge,
+      c3.2xlarge, c3.4xlarge, c3.8xlarge, r3.large, r3.xlarge, r3.2xlarge, r3.4xlarge,
+      r3.8xlarge, i2.xlarge, i2.2xlarge, i2.4xlarge, i2.8xlarge]
+    ConstraintDescription: Please choose a valid instance type.
+  OMEROServerContainerCPU:
+    Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
+    Type: Number
+    Default: 2048
+    AllowedValues: [256, 512, 1024, 2048, 4096]
+  OMEROServerContainerMemory:
+    Description: The amount (in MiB) of memory to present to the container. . Memory should be at least two times of vCPU unit according to documentation.
+    Type: Number
+    Default: 4096
+    AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
+  DBUser:
+    Type: String
+    Default: omero
+    Description: OMERO Database User
+    NoEcho: true
+  RDSDatabaseSecret: 
+    Type: String
+    Description: OMERO Database Password
+    Default: RDSDatabaseSecret
+  ExistingHostedZoneId:
+    Description: Existing HostedZone for Registered Domain used for ACM Certificate
+    Type: AWS::Route53::HostedZone::Id
+  FullDomainName:
+    Description: Enter the Fully Qualified Domain Nanme for ACM Certificate 
+    Type: String
+  
+
+Mappings:
+  AWSRegionToAMI:
+    us-east-1:
+      AMIID: ami-0c1f575380708aa63
+    us-east-2:
+      AMIID: ami-015a2afe7e1a8af56
+    us-west-1:
+      AMIID: ami-032a827d612b78a50
+    us-west-2:
+      AMIID: ami-05edb14e89a5b98f3
+    ap-northeast-1:
+      AMIID: ami-06ee72c3360fd7fad
+    ap-northeast-2:
+      AMIID: ami-0cfc5eb79eceeeec9
+    ap-south-1:
+      AMIID: ami-078902ae8103daac8
+    ap-southeast-1:
+      AMIID: ami-09dd721a797640468
+    ap-southeast-2:
+      AMIID: ami-040bd2e2325535b3d
+    ca-central-1:
+      AMIID: ami-0a06b44c462364156
+    eu-central-1:
+      AMIID: ami-09509e8f8dea8ab83
+    eu-north-1:
+      AMIID: ami-015b157d082fd4e0d
+    eu-west-1:
+      AMIID: ami-0489c3efb4fe85f5d
+    eu-west-2:
+      AMIID: ami-037dd70536680c11f
+    eu-west-3:
+      AMIID: ami-0182381900083ba64
+    sa-east-1:
+      AMIID: ami-05313c3a9e9148109
+
+  RegionELBAccountIdMap:
+    us-east-1:
+      AccountId: '127311923021'
+    us-west-1:
+      AccountId: '027434742980'
+    us-west-2:
+      AccountId: '797873946194'
+    eu-west-1:
+      AccountId: '156460612806'
+    ap-northeast-1:
+      AccountId: '582318560864'
+    ap-northeast-2:
+      AccountId: '600734575887'
+    ap-southeast-1:
+      AccountId: '114774131450'
+    ap-southeast-2:
+      AccountId: '783225319266'
+    ap-south-1:
+      AccountId: '718504428378'
+    us-east-2:
+      AccountId: '033677994240'
+    sa-east-1:
+      AccountId: '507241528517'
+    cn-north-1:
+      AccountId: '638102146993'
+    eu-central-1:
+      AccountId: '054676820928'
+
+Resources:
+  CloudMap:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Description: Service Map for Docker Compose project omero-on-aws
+      Name: omero-on-aws.local
+      Vpc: !Ref VPCID
+  OmeroserverreadonlyServiceDiscoveryEntry:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: '"omeroserver-readonly" service discovery entry in Cloud Map'
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: omeroserver-readonly
+      NamespaceId:
+        Ref: CloudMap
+  OmeroserverreadwriteServiceDiscoveryEntry:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: '"omeroserver-readwrite" service discovery entry in Cloud Map'
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: omeroserver-readwrite
+      NamespaceId:
+        Ref: CloudMap
+  OmerowebServiceDiscoveryEntry:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: '"omeroweb" service discovery entry in Cloud Map'
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: omeroweb
+      NamespaceId:
+        Ref: CloudMap
+
+  OMEROECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: OMEROECSCluster
+      ClusterSettings:
+        - Name: containerInsights
+          Value:  enabled
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+
+  OMEROLoadBalancer:
+    Condition: CreateLoadBalancer
+    DependsOn:
+      - LBAccessLogBucket
+      - LBAccessLogBucketPolicy
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: OMEROLoadBalancer
+      LoadBalancerAttributes:
+        - Key: load_balancing.cross_zone.enabled
+          Value: true
+      Scheme: internet-facing
+      Subnets:
+        - !Ref 'PublicSubnet1Id'
+        - !Ref 'PublicSubnet2Id'
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+      Type: network
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: true
+        - Key: access_logs.s3.bucket
+          Value: !Join
+            - '-'
+            - - !Ref LBAccessLogBucketName
+              - !Ref AWS::AccountId
+              - !Ref AWS::Region
+  LBAccessLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join
+            - '-'
+            - - !Ref LBAccessLogBucketName
+              - !Ref AWS::AccountId
+              - !Ref AWS::Region
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+  LBAccessLogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties: 
+      Bucket: !Ref LBAccessLogBucket
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 's3:PutObject'
+            Effect: Allow
+            Resource: 
+              - !Sub '${LBAccessLogBucket.Arn}/*'
+            Principal: 
+              AWS: !FindInMap [RegionELBAccountIdMap, !Ref 'AWS::Region', AccountId]
+          - Action:
+              - 's3:PutObject'
+            Effect: Allow
+            Resource: 
+              - !Sub '${LBAccessLogBucket.Arn}/*'
+            Principal: 
+              Service: delivery.logs.amazonaws.com
+          - Action:
+              - 's3:GetBucketAcl'
+            Effect: Allow
+            Resource: 
+              - !Sub ${LBAccessLogBucket.Arn}
+            Principal: 
+              Service: delivery.logs.amazonaws.com
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/omero
+
+  
+  OmeroRootAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref OmeroFilesystem
+      PosixUser:
+        Gid: "0"
+        Uid: "0"
+      RootDirectory:
+        Path: "/"
+      AccessPointTags:
+      - Key: project
+        Value: omero-on-aws
+      - Key: volume
+        Value: omero
+  OmeroAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref OmeroFilesystem
+      RootDirectory:
+        Path: "/"
+      AccessPointTags:
+      - Key: project
+        Value: omero-on-aws
+      - Key: volume
+        Value: omero
+  OmeroNFSMountTargetOnSubnet1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref OmeroFilesystem
+      SecurityGroups: 
+        - !Ref OmeroSecurityGroup
+      SubnetId: !Ref PublicSubnet1Id
+  OmeroNFSMountTargetOnSubnet2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref OmeroFilesystem
+      SecurityGroups: 
+        - !Ref OmeroSecurityGroup
+      SubnetId: !Ref PublicSubnet2Id
+  
+  OmeroserverreadonlyService:
+    DependsOn:
+      - OmeroserverreadonlyTCP14064Listener
+      - OmeroserverreadwriteService
+      - OmerowebService
+      - OmeroserverreadonlyTaskDefinition
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref 'OMEROECSCluster'
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: ECS
+      DesiredCount: !Ref NumberofReadOnlyServerInstances
+      LaunchType: EC2
+      LoadBalancers:
+        - ContainerName: omeroserver-readonly
+          ContainerPort: 14064
+          TargetGroupArn: !Ref OmeroserverreadonlyTCP14064TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups: 
+            - !Ref OmeroSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet1Id
+      PropagateTags: SERVICE
+      SchedulingStrategy: REPLICA
+      ServiceRegistries:
+        - RegistryArn: !GetAtt OmeroserverreadonlyServiceDiscoveryEntry.Arn
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: service
+          Value: omeroserver-readonly
+      TaskDefinition: !Ref OmeroserverreadonlyTaskDefinition
+  OmeroserverreadonlyTCP14064Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - ForwardConfig:
+          TargetGroups:
+          - TargetGroupArn:
+              Ref: OmeroserverreadonlyTCP14064TargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref OMEROLoadBalancer
+      Port: 14064
+      Protocol: TCP
+  OmeroserverreadonlyTCP14064TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 14064
+      Protocol: TCP
+      Tags:
+      - Key: project
+        Value: omero-on-aws
+      TargetType: ip
+      VpcId: !Ref VPCID
+  OmeroserverreadonlyTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+      - Command:
+        - us-west-2.compute.internal
+        - omero-on-aws.local
+        Essential: false
+        Image: docker/ecs-searchdomain-sidecar:1.0
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: omero-on-aws
+        Name: Omeroserverreadonly_ResolvConf_InitContainer
+      - DependsOn:
+        - Condition: SUCCESS
+          ContainerName: Omeroserverreadonly_ResolvConf_InitContainer
+        Environment:
+          - Name: CONFIG_omero_cluster_read__only
+            Value: "true"
+          - Name: CONFIG_omero_ports_prefix
+            Value: 1 
+          - Name: CONFIG_omero_db_host
+            Value: !Ref RDSEndpointAddress
+          - Name: CONFIG_omero_db_name
+            Value: omero
+          - Name: CONFIG_omero_db_pass
+            Value: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSDatabaseSecret, ':SecretString:password}}' ]]
+          - Name: CONFIG_omero_db_user
+            Value: !Ref DBUser
+          - Name: CONFIG_omero_pixeldata_memoizer_dir_local
+            Value: /tmp/BioFormatsCache
+          - Name: ROOTPASS
+            Value: omero
+          - Name: LOCALDOMAIN
+            Value: !Join
+              - ''
+              - - !Ref 'AWS::Region'
+                - .compute.internal
+                - 'omero.local'
+        Essential: true
+        Image: openmicroscopy/omero-server:5.6
+        LinuxParameters: {}
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group: !Ref 'LogGroup'
+            awslogs-region: !Ref 'AWS::Region'
+            awslogs-stream-prefix: omero-on-aws-readonly
+        MountPoints:
+        - ContainerPath: /OMERO
+          ReadOnly: true
+          SourceVolume: omero
+        Name: omeroserver-readonly
+        PortMappings:
+          - ContainerPort: 14064
+            HostPort: 14064
+            Protocol: tcp
+      Cpu: !Ref OMEROServerContainerCPU
+      Memory: !Ref OMEROServerContainerMemory
+      ExecutionRoleArn: !Ref OmeroserverreadonlyTaskExecutionRole
+      Family: omero-on-aws-omeroserver-readonly
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - EC2
+      TaskRoleArn: !Ref OmeroserverreadonlyTaskRole
+      Volumes:
+        - EFSVolumeConfiguration:
+            AuthorizationConfig:
+              AccessPointId: !Ref OmeroAccessPoint
+              IAM: ENABLED
+            FilesystemId: !Ref OmeroFilesystem
+            TransitEncryption: ENABLED
+          Name: omero
+  OmeroserverreadonlyTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Condition: {}
+          Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Tags:
+      - Key: project
+        Value: omero-on-aws
+      - Key: service
+        Value: omeroserver-readonly
+  OmeroserverreadonlyTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Condition: {}
+          Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+        Version: 2012-10-17
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - elasticfilesystem:ClientMount
+            - elasticfilesystem:ClientWrite
+            - elasticfilesystem:ClientRootAccess
+            Condition:
+              StringEquals:
+                elasticfilesystem:AccessPointArn:
+                  Ref: OmeroAccessPoint
+            Effect: Allow
+            Principal: {}
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:elasticfilesystem:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':file-system/'
+                  - !Ref OmeroFilesystem
+          Version: 2012-10-17
+        PolicyName: OmeroserverreadonlyOmeroVolumeMountPolicy
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: service
+          Value: omeroserver-readonly
+
+  OmeroserverreadwriteService:
+    DependsOn:
+      - OmeroserverreadwriteTCP4064Listener
+      - OmeroserverreadwriteTaskDefinition
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref 'OMEROECSCluster'
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: ECS
+      DesiredCount: 1
+      LaunchType: EC2
+      LoadBalancers:
+        - ContainerName: omeroserver-readwrite
+          ContainerPort: 4064
+          TargetGroupArn: !Ref OmeroserverreadwriteTCP4064TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups: 
+            - !Ref OmeroSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet2Id
+      PropagateTags: SERVICE
+      SchedulingStrategy: REPLICA
+      ServiceRegistries:
+        - RegistryArn: !GetAtt OmeroserverreadwriteServiceDiscoveryEntry.Arn
+      Tags:
+      - Key: project
+        Value: omero-on-aws
+      - Key: service
+        Value: omeroserver-readwrite
+      TaskDefinition: !Ref OmeroserverreadwriteTaskDefinition
+  OmeroserverreadwriteTCP4064Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref OmeroserverreadwriteTCP4064TargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref OMEROLoadBalancer
+      Port: 4064
+      Protocol: TCP
+  OmeroserverreadwriteTCP4064TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 4064
+      Protocol: TCP
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+      TargetType: ip
+      VpcId: !Ref VPCID
+  OmeroserverreadwriteTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+      - Command:
+        - us-west-2.compute.internal
+        - omero-on-aws.local
+        Essential: false
+        Image: docker/ecs-searchdomain-sidecar:1.0
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: omero-on-aws
+        Name: Omeroserverreadwrite_ResolvConf_InitContainer
+      - DependsOn:
+        - Condition: SUCCESS
+          ContainerName: Omeroserverreadwrite_ResolvConf_InitContainer
+        Environment:
+          - Name: CONFIG_omero_db_host
+            Value: !Ref RDSEndpointAddress
+          - Name: CONFIG_omero_db_name
+            Value: omero
+          - Name: CONFIG_omero_db_pass
+            Value: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSDatabaseSecret, ':SecretString:password}}' ]]
+          - Name: CONFIG_omero_db_user
+            Value: !Ref DBUser
+          - Name: ROOTPASS
+            Value: omero
+          - Name: LOCALDOMAIN
+            Value: !Join
+              - ''
+              - - !Ref 'AWS::Region'
+                - .compute.internal
+                - 'omero.local'
+        Essential: true
+        Image: openmicroscopy/omero-server:5.6
+        LinuxParameters: {}
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group: !Ref LogGroup
+            awslogs-region: !Ref 'AWS::Region'
+            awslogs-stream-prefix: omero-on-aws-readwrite
+        MountPoints:
+          - ContainerPath: /OMERO
+            SourceVolume: omero
+        Name: omeroserver-readwrite
+        PortMappings:
+          - ContainerPort: 4064
+            HostPort: 4064
+            Protocol: tcp
+          - ContainerPort: 4063
+            HostPort: 4063
+            Protocol: tcp
+      Cpu: !Ref OMEROServerContainerCPU
+      Memory: !Ref OMEROServerContainerMemory
+      ExecutionRoleArn: !Ref OmeroserverreadwriteTaskExecutionRole
+      Family: omero-on-aws-omeroserver-readwrite
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - EC2
+      TaskRoleArn: !Ref OmeroserverreadwriteTaskRole
+      Volumes:
+        - EFSVolumeConfiguration:
+            AuthorizationConfig:
+              AccessPointId: !Ref OmeroRootAccessPoint
+              IAM: ENABLED
+            FilesystemId: !Ref OmeroFilesystem
+            TransitEncryption: ENABLED
+          Name: omero
+  OmeroserverreadwriteTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Condition: {}
+          Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: service
+          Value: omeroserver-readwrite
+  OmeroserverreadwriteTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Condition: {}
+          Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+        Version: 2012-10-17
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - elasticfilesystem:ClientMount
+            - elasticfilesystem:ClientWrite
+            - elasticfilesystem:ClientRootAccess
+            Condition:
+              StringEquals:
+                elasticfilesystem:AccessPointArn: !Ref OmeroRootAccessPoint
+            Effect: Allow
+            Principal: {}
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:elasticfilesystem:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':file-system/'
+                  - !Ref OmeroFilesystem
+          Version: 2012-10-17
+        PolicyName: OmeroserverreadwriteOmeroVolumeMountPolicy
+      Tags:
+      - Key: project
+        Value: omero-on-aws
+      - Key: service
+        Value: omeroserver-readwrite
+
+  ECSAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn:
+      - OmeroNFSMountTargetOnSubnet1
+      - OmeroNFSMountTargetOnSubnet2
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1Id
+        - !Ref PublicSubnet2Id
+      LaunchConfigurationName: !Ref 'ContainerInstances'
+      MinSize: '2'
+      MaxSize: '4'
+      DesiredCapacity: !Ref NumberofEC2Instances
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: 'true'
+  ContainerInstances:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMIID]
+      SecurityGroups:
+            - !Ref OmeroSecurityGroup
+      InstanceType: !Ref 'InstanceType'
+      IamInstanceProfile: !Ref 'EC2InstanceProfile'
+      KeyName: !Ref 'KeyName'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          echo ECS_CLUSTER=${OMEROECSCluster} >> /etc/ecs/ecs.config
+          yum install -y aws-cfn-bootstrap bzip2 unzip telnet netstat
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
+          yum install java-11-amazon-corretto-headless -y
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  
+          unzip awscliv2.zip  
+          ./aws/install
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      Tags:
+      - Key: project
+        Value: omero-on-aws
+      - Key: service
+        Value: omeroserver
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [!Ref 'EC2Role']
+  
+  OmerowebService:
+    DependsOn:
+      - OmerowebHTTPSListener
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref 'OMEROECSCluster'
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: ECS
+      DesiredCount: !Ref NumberofWebInstances
+      LaunchType: FARGATE
+      LoadBalancers:
+        - ContainerName: omeroweb
+          ContainerPort: 4080
+          TargetGroupArn:
+            Ref: OmerowebTCP4080TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups: 
+            - !Ref OmeroSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet1Id
+            - !Ref PublicSubnet2Id
+      PlatformVersion: 1.4.0
+      PropagateTags: SERVICE
+      SchedulingStrategy: REPLICA
+      ServiceRegistries:
+        - RegistryArn: !GetAtt OmerowebServiceDiscoveryEntry.Arn
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: service
+          Value: omeroweb
+      TaskDefinition: !Ref OmerowebTaskDefinition
+
+  HostedZoneRecord:
+    DependsOn: 
+      - LoadBalancerSSLCert
+    Type: AWS::Route53::RecordSet
+    Properties: 
+      HostedZoneId: !Ref ExistingHostedZoneId
+      Type: A
+      Name: !Ref FullDomainName
+      AliasTarget:
+        DNSName: !GetAtt 'OMEROLoadBalancer.DNSName'
+        HostedZoneId: !GetAtt 'OMEROLoadBalancer.CanonicalHostedZoneID'
+
+  LoadBalancerSSLCert:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref FullDomainName
+      DomainValidationOptions:
+            - DomainName: !Ref FullDomainName
+              HostedZoneId: !Ref ExistingHostedZoneId
+      ValidationMethod: DNS
+      CertificateTransparencyLoggingPreference: DISABLED
+      
+  OmerowebHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+        - CertificateArn: !Ref LoadBalancerSSLCert
+      DefaultActions:
+        - ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref 'OmerowebTCP4080TargetGroup'
+          Type: forward
+      LoadBalancerArn: !If
+        - CreateLoadBalancer
+        - !Ref 'OMEROLoadBalancer'
+        - !Ref 'ParameterLoadBalancerARN'
+      Port: 443
+      Protocol: TLS
+  OmerowebTCP4080TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 4080
+      Protocol: TCP
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+      TargetType: ip
+      VpcId: !Ref VPCID
+  OmerowebTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+      - Command:
+        - us-west-2.compute.internal
+        - omero-on-aws.local
+        Essential: false
+        Image: docker/ecs-searchdomain-sidecar:1.0
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: omero-on-aws
+        Name: Omeroweb_ResolvConf_InitContainer
+      - DependsOn:
+        - Condition: SUCCESS
+          ContainerName: Omeroweb_ResolvConf_InitContainer
+        Environment:
+        - Name: CONFIG_omero_web_server__list
+          Value: '[["omeroserver-readonly", 14064, "read-only"], ["omeroserver-readwrite",
+            4064, "read-write"]]'
+        - Name: CONFIG_omero_web_secure 
+          Value: true
+        Essential: true
+        Image: openmicroscopy/omero-web-standalone:5.6
+        LinuxParameters: {}
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group: !Ref LogGroup
+            awslogs-region: !Ref AWS::Region
+            awslogs-stream-prefix: omero-on-aws-web
+        Name: omeroweb
+        PortMappings:
+          - ContainerPort: 4080
+            HostPort: 4080
+            Protocol: tcp
+      Cpu: !Ref OMEROWebContainerCPU
+      Memory: !Ref OMEROWebContainerMemory
+      ExecutionRoleArn: !Ref OmerowebTaskExecutionRole
+      Family: omero-on-aws-omeroweb
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+  OmerowebTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Condition: {}
+          Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Tags:
+      - Key: project
+        Value: omero-on-aws
+      - Key: service
+        Value: omeroweb
+
+Outputs:
+  LoadBalancerHTTPEnpoint:
+    Description: The HTTP endpoint of the LoadBalancer
+    Value: !Join
+      - ''
+      - - 'http://'
+        - !GetAtt OMEROLoadBalancer.DNSName
+        - ':4080'

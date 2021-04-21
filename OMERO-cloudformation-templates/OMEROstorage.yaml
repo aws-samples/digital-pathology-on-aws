@@ -34,6 +34,23 @@ Parameters:
   RDSDBInstanceClass:
     Type: String
     Default: "db.t3.medium"
+    Description: Database Instance Class. For more information, go to https://aws.amazon.com/rds/instance-types/
+    AllowedValues:
+      - db.t3.medium
+      - db.r4.large
+      - db.r4.xlarge
+      - db.r4.2xlarge
+      - db.r4.4xlarge
+      - db.r4.8xlarge
+      - db.r4.16xlarge
+      - db.r5.large
+      - db.r5.xlarge
+      - db.r5.2xlarge
+      - db.r5.4xlarge
+      - db.r5.8xlarge
+      - db.r5.12xlarge
+      - db.r5.16xlarge
+      - db.r5.24xlarge
   RDSDBStorageType:
     Type: String
     Default: "gp2"
@@ -86,6 +103,11 @@ Resources:
           FromPort: 4064
           IpProtocol: TCP
           ToPort: 4064
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroserver:14064/tcp
+          FromPort: 14064
+          IpProtocol: TCP
+          ToPort: 14064
         - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
           Description: ssh
           FromPort: 22

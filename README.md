@@ -3,11 +3,8 @@
 
 ### Deploy Open Source [OMERO](https://www.openmicroscopy.org/omero/) on AWS
 
-[OMERO deployment](https://github.com/ome/omero-deployment-examples) is a typical three tier Web application. OMERO web and server are containerized and can run on [AWS ECS](https://aws.amazon.com/ecs). The data is stored in the [AWS EFS](https://aws.amazon.com/efs/) mounted to OMERO server and the [AWS RDS](https://aws.amazon.com/rds/) PostgreSQL database. Since current OMERO server only support one writer per mounted network share file, we will deploy only one read+write OMERO server in the following CloudFormation templates, otherwise there will be  a race condition between the two instances trying to own a lock on the network file share. Even though the OMERO server is deployed in single instance, we can achieve the Hight Availability (HA) deployment of OMERO web and PostgreSQL database.
+[OMERO deployment](https://github.com/ome/omero-deployment-examples) is a typical three tier Web application. OMERO web and server are containerized and can run on [AWS ECS](https://aws.amazon.com/ecs). The data is stored in the [AWS EFS](https://aws.amazon.com/efs/) mounted to OMERO server and the [AWS RDS](https://aws.amazon.com/rds/) PostgreSQL database. 
 
-The diagram of Architecture is here:
-
-![arch](Figures/omero-on-aws-rw.jpg)
 
 #### Pre-requisite
 
@@ -18,18 +15,22 @@ First create the network infrastructure. One way to do it is to deploy using [th
 
 #### Deploy OMERO Stack
 
-Next the OMERO stack can be deployed using this 1-click deployment:  
+Current OMERO server only support one writer per mounted network share file. To avoid a race condition between the two instances trying to own a lock on the network file share, we will deploy one read+write OMERO server and one read only OMERO server in the following CloudFormation templates:  
+
+The diagram of Architecture is here:
+
+![arch](Figures/omero-on-aws-ha.jpg)
+
+The OMERO stack can be deployed using this 1-click deployment:  
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackFargateTLS_RW.yml)
 
 which will deploy two nested CloudFormation templates, one for storage (EFS and RDS) and one for ECS containers (OMERO web and server). It also deploys a certificate for TLS termination at Network Load Balancer. Majority of parameters already have default values filled and subject to be customized. VPC and Subnets are required, which are from previous deployment. It also requires the Hosted Zone ID and fully qualifed domain name in [AWS Route53](https://aws.amazon.com/route53/), which will be used to validate SSL Certificate issued by [AWS ACM](https://aws.amazon.com/certificate-manager/).
 
-If you want to connect to the instance that host the OMERO server container and run omero client CLI to import images on that instance, you can deploy the OMERO server container on ECS EC2 instance using 1-click deployment:  
+
+If you do not need the redundency for read only OMERO server, you can deploy a single read+write OMERO server using this 1-click deployment:  
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackTLS_RW.yml)
 
-In this deployment, OMERO server is running on EC2 instance, and everything else is same as earlier CloudFormation template. We have installed [AWS CLI](https://aws.amazon.com/cli/) and [Amazon Corretto 11](https://docs.aws.amazon.com/corretto/latest/corretto-11-ug/what-is-corretto-11.html) on the EC2 instance hosting OMERO server container using [AWS EC2 user data shell scripts](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html). To import microscopic images to OMERO server, you can connect to the EC2 instance using SSH client (login as ec2-user) or Session Manager (login as ssm-user).
-
-
-Once connected, run the following scripts on the EC2 instance to install [omero-py](https://docs.openmicroscopy.org/omero/5.6.0/developers/Python.html):  
+Even though the OMERO server is deployed in single instance, you can achieve the Hight Availability (HA) deployment of OMERO web and PostgreSQL database. Hosting OMERO server container on EC2 allow you to connect to the instance and run omero client CLI to import images on that instance. We have installed [AWS CLI](https://aws.amazon.com/cli/) and [Amazon Corretto 11](https://docs.aws.amazon.com/corretto/latest/corretto-11-ug/what-is-corretto-11.html) on the EC2 instance hosting OMERO server container using [AWS EC2 user data shell scripts](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html). To import microscopic images to OMERO server, you can connect to the EC2 instance using SSH client (login as ec2-user) or Session Manager (login as ssm-user). Once connected, run the following scripts on the EC2 instance to install [omero-py](https://docs.openmicroscopy.org/omero/5.6.0/developers/Python.html):  
 
 ``` 
 curl -LO https://anaconda.org/anaconda-adam/adam-installer/4.4.0/download/adam-installer-4.4.0-Linux-x86_64.sh  
@@ -58,6 +59,8 @@ Once you login, you can import whole slide images, like:
 
 `omero import ./xxxxxx.svs`
 
+If you do not need to login the hosting instance, you can deploy the OMERO server container on ECS Fargate using 1-click deployment:  
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackFargateTLS_RW.yml)
 
 If you do not have registered domain and associated hosted zone in AWS Route53, you can deploy the following CloudFormation stacks and access to OMERO web through Network Load Balancer DNS name without TLS termination. Again, you have two options: 
 

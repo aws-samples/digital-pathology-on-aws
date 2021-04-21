@@ -1,0 +1,216 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'EFS Persistent Storage'
+        Parameters:
+          - OMEROStorageEFSNameTag
+          - EFSBackup
+          - EFSStorageArchiveAfter
+      - Label:
+          default: 'RDS Database'
+        Parameters:
+          - RDSDBInstanceSize
+          - RDSDBStorage
+          - RDSDStorageSize
+          - RDSDBUserName
+          - RDSDBBackupRetainInDays
+          - RDSDBMultiAZ
+      - Label:
+          default: 'ECS'
+        Parameters:
+          - EC2KeyName
+          - EC2InstanceType
+          - LoadBalancerAccessLogBucketName
+          - CountofWebInstances
+          - OMEROWebContainerCPUSize
+          - OMEROWebContainerMemorySize
+          - OMEROServerContainerCPUSize
+          - OMEROServerContainerMemorySize
+      - Label:
+          default: 'Infrastructure'
+        Parameters:
+          - OMEROVPCID
+          - DatabasePrivateSubnet1Id
+          - DatabasePrivateSubnet2Id
+          - ECSPublicSubnet1Id
+          - ECSPublicSubnet2Id
+          - CIDROMEROSecurityGroup
+
+Parameters:
+  OMEROVPCID:
+    Description: ID of the VPC
+    Type: AWS::EC2::VPC::Id
+  DatabasePrivateSubnet1Id:
+    Description: SubnetId, for Availability Zone 1 in the region in your VPC
+    Type: AWS::EC2::Subnet::Id
+  DatabasePrivateSubnet2Id:
+    Description: SubnetId, for Availability Zone 2 in the region in your VPC
+    Type: AWS::EC2::Subnet::Id
+  ECSPublicSubnet1Id:
+    Description: SubnetId, for Availability Zone 1 in the region in your VPC. The only one OMERO Server instance is deployed in this subnet.
+    Type: AWS::EC2::Subnet::Id
+  ECSPublicSubnet2Id:
+    Description: SubnetId, for Availability Zone 2 in the region in your VPC. None of OMERO Server instance is deployed in this subnet.
+    Type: AWS::EC2::Subnet::Id
+  CIDROMEROSecurityGroup:
+    Type: String
+    Default: '0.0.0.0/0'
+  OMEROStorageEFSNameTag:
+    Description: The name of the EFS volume
+    Type: String
+    MinLength: '1'
+    Default: OMEROEFSvolume
+  EFSBackup:
+    Type: String
+    Description: whether enable EFS backup or not. EFS backup has extra associated cost.
+    Default: ENABLED
+    AllowedValues: [ENABLED, DISABLED]
+  EFSStorageArchiveAfter:
+    Type: String
+    Description: A value that describes the period of time that a file is not accessed, after which it transitions to the IA storage class.
+    Default: AFTER_90_DAYS
+    AllowedValues: [AFTER_14_DAYS, AFTER_30_DAYS, AFTER_60_DAYS, AFTER_7_DAYS, AFTER_90_DAYS]
+  RDSDBMultiAZ:
+    Type: String
+    Default: False
+    Description: True or False for RDS Multiple Availability Zone
+  RDSDBInstanceSize:
+    Type: String
+    Default: "db.t3.medium"
+  RDSDBStorage:
+    Type: String
+    Default: "gp2"
+  RDSDStorageSize:
+    Type: Number
+    Default: 20
+  RDSDBUserName:
+    Type: String
+    Default: omero
+    Description: OMERO Database User
+    NoEcho: true
+  RDSDBBackupRetainInDays:
+    Type: Number
+    Default: 30
+    Description: The number of days for which automated backups are retained. Setting this parameter to a positive number (from 1 to 35) enables backups. Setting this parameter to 0 disables automated backups. 
+  ExistingLoadBalancerARN:
+    Description: Name of the LoadBalancer to connect to (optional)
+    Type: String
+  EC2KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the ECS EC2 instance hosting OMERO Server.
+  LoadBalancerAccessLogBucketName:
+    Type: String
+    Default: ecs-loadbalancer-accesslog
+  CountofWebInstances:
+    Type: Number
+    Default: 2
+    Description: Number of OMERO Web containers
+  OMEROWebContainerCPUSize:
+    Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
+    Type: Number
+    Default: 2048
+    AllowedValues: [256, 512, 1024, 2048, 4096]
+  OMEROWebContainerMemorySize:
+    Description: The amount (in MiB) of memory to present to the container. . Memory should be at least two times of vCPU unit according to documentation.
+    Type: Number
+    Default: 4096
+    AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
+  CountofEC2Instances:
+    Type: Number
+    Default: 2
+    Description: Number of EC2 instances hosting OMERO server containers
+  CountofReadOnlyServerInstances:
+    Type: Number
+    Default: 1
+    Description: Number of OMERO ReadOnly Server containers
+  EC2InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: m4.xlarge
+    AllowedValues: [t2.large, m3.large,
+      m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
+      c4.large, c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, c3.large, c3.xlarge,
+      c3.2xlarge, c3.4xlarge, c3.8xlarge, r3.large, r3.xlarge, r3.2xlarge, r3.4xlarge,
+      r3.8xlarge, i2.xlarge, i2.2xlarge, i2.4xlarge, i2.8xlarge]
+    ConstraintDescription: Please choose a valid instance type.
+  OMEROServerContainerCPUSize:
+    Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
+    Type: Number
+    Default: 2048
+    AllowedValues: [256, 512, 1024, 2048, 4096]
+  OMEROServerContainerMemorySize:
+    Description: The amount (in MiB) of memory to present to the container. . Memory should be at least two times of vCPU unit according to documentation.
+    Type: Number
+    Default: 4096
+    AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
+  ExistingRoute53HostedZoneId:
+    Description: Existing HostedZone for Registered Domain used to validate SSL Certificate 
+    Type: AWS::Route53::HostedZone::Id
+  Route53FullDomainName:
+    Description: Enter the Fully Qualified Domain Name to validate SSL Certificate 
+    Type: String
+
+Resources:
+  StorageStack:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstorage.yaml
+      Parameters: 
+        EFSNameTag: !Ref OMEROStorageEFSNameTag
+        VPCID: !Ref OMEROVPCID
+        PrivateSubnet1Id: !Ref DatabasePrivateSubnet1Id
+        PrivateSubnet2Id: !Ref DatabasePrivateSubnet2Id
+        CIDRblock4OMEROSecurityGroup: !Ref CIDROMEROSecurityGroup
+        EnableEFSBackup: !Ref EFSBackup
+        EFSStorageInfrequentAcessAfter: !Ref EFSStorageArchiveAfter
+        IsDBMultiAZ: !Ref RDSDBMultiAZ
+        RDSDBInstanceClass: !Ref RDSDBInstanceSize
+        RDSDBStorageType: !Ref RDSDBStorage
+        RDSDBAllocatedStorage: !Ref RDSDStorageSize
+        DBUser: !Ref RDSDBUserName
+        RDSDBBackupRetentionDays: !Ref RDSDBBackupRetainInDays
+  ECScontainerStack:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonEC2EFSRDS_NLBACMDNS_RW.yaml
+      Parameters:
+        ParameterLoadBalancerARN: !Ref ExistingLoadBalancerARN
+        VPCID: !Ref OMEROVPCID
+        PublicSubnet1Id: !Ref ECSPublicSubnet1Id
+        PublicSubnet2Id: !Ref ECSPublicSubnet2Id
+        KeyName: !Ref EC2KeyName
+        LBAccessLogBucketName: !Ref LoadBalancerAccessLogBucketName
+        NumberofWebInstances: !Ref CountofWebInstances
+        OMEROWebContainerCPU: !Ref OMEROWebContainerCPUSize
+        OMEROWebContainerMemory: !Ref OMEROWebContainerMemorySize
+        NumberofEC2Instances: !Ref CountofEC2Instances
+        NumberofReadOnlyServerInstances: !Ref CountofReadOnlyServerInstances
+        InstanceType: !Ref EC2InstanceType
+        OMEROServerContainerCPU: !Ref OMEROServerContainerCPUSize
+        OMEROServerContainerMemory: !Ref OMEROServerContainerMemorySize
+        DBUser: !Ref RDSDBUserName
+        ExistingHostedZoneId: !Ref ExistingRoute53HostedZoneId
+        FullDomainName: !Ref Route53FullDomainName
+        EFSSecurityGroup:
+          Fn::GetAtt: 
+          - StorageStack
+          - Outputs.EFSSecurityGroup
+        OmeroSecurityGroup: 
+          Fn::GetAtt: 
+          - StorageStack
+          - Outputs.OmeroSecurityGroup
+        EFSFileSystem:
+          Fn::GetAtt: 
+          - StorageStack
+          - Outputs.EFSFileSystemID
+        RDSEndpointAddress:
+          Fn::GetAtt: 
+          - StorageStack
+          - Outputs.RDSEndpointAddress
+        RDSDatabaseSecret:
+          Fn::GetAtt: 
+          - StorageStack
+          - Outputs.RDSDatabaseSecret

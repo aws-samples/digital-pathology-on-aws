@@ -190,6 +190,9 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Name: OMEROLoadBalancer
+      LoadBalancerAttributes:
+        - Key: load_balancing.cross_zone.enabled
+          Value: "true"
       Scheme: internet-facing
       Subnets:
         - !Ref 'PublicSubnet1Id'
