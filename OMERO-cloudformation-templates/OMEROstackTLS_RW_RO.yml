@@ -175,7 +175,7 @@ Resources:
   ECScontainerStack:
     Type: 'AWS::CloudFormation::Stack'
     Properties:
-      TemplateURL: https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonEC2EFSRDS_NLBACMDNS_RW.yaml
+      TemplateURL: https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonEC2EFSRDS_NLBACMDNS_RW_RO.yml
       Parameters:
         ParameterLoadBalancerARN: !Ref ExistingLoadBalancerARN
         VPCID: !Ref OMEROVPCID
