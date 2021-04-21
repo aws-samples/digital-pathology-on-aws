@@ -32,7 +32,7 @@ Parameters:
     Type: String
   LBAccessLogBucketName:
     Type: String
-    Default: ecs-loadbalancer-accesslog
+    Default: omero-ecs-loadbalancer-accesslog
   RDSEndpointAddress:
     Type: String
     Description: The RDS database endpoinst address
@@ -843,7 +843,7 @@ Resources:
               HostedZoneId: !Ref ExistingHostedZoneId
       ValidationMethod: DNS
       CertificateTransparencyLoggingPreference: DISABLED
-      
+
   OmerowebHTTPSListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:

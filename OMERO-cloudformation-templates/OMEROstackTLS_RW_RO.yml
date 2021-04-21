@@ -103,7 +103,7 @@ Parameters:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the ECS EC2 instance hosting OMERO Server.
   LoadBalancerAccessLogBucketName:
     Type: String
-    Default: ecs-loadbalancer-accesslog
+    Default: omero-ecs-loadbalancer-accesslog
   CountofWebInstances:
     Type: Number
     Default: 2
