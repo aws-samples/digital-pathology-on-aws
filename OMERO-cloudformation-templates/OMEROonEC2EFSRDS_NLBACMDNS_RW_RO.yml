@@ -393,7 +393,7 @@ Resources:
     Properties:
       ContainerDefinitions:
       - Command:
-        - us-west-2.compute.internal
+        - !Sub ${AWS::Region}.compute.internal
         - omero-on-aws.local
         Essential: false
         Image: docker/ecs-searchdomain-sidecar:1.0
@@ -589,7 +589,7 @@ Resources:
     Properties:
       ContainerDefinitions:
       - Command:
-        - us-west-2.compute.internal
+        - !Sub ${AWS::Region}.compute.internal
         - omero-on-aws.local
         Essential: false
         Image: docker/ecs-searchdomain-sidecar:1.0
@@ -875,7 +875,7 @@ Resources:
     Properties:
       ContainerDefinitions:
       - Command:
-        - us-west-2.compute.internal
+        - !Sub ${AWS::Region}.compute.internal
         - omero-on-aws.local
         Essential: false
         Image: docker/ecs-searchdomain-sidecar:1.0
