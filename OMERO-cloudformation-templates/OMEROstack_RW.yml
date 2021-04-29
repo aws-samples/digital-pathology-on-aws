@@ -29,6 +29,8 @@ Metadata:
           - OMEROWebContainerMemorySize
           - OMEROServerContainerCPUSize
           - OMEROServerContainerMemorySize
+          - OMEROWebContainerImageParam
+          - OMEROServerContainerImageParam
       - Label:
           default: 'Infrastructure'
         Parameters:
@@ -108,6 +110,12 @@ Parameters:
     Type: Number
     Default: 2
     Description: Number of OMERO Web containers
+  OMEROServerContainerImageParam:
+    Type: String 
+    Default: openmicroscopy/omero-server:latest
+  OMEROWebContainerImageParam:
+    Type: String 
+    Default: openmicroscopy/omero-web-standalone:latest
   OMEROWebContainerCPUSize:
     Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
     Type: Number
@@ -175,6 +183,8 @@ Resources:
         InstanceType: !Ref EC2InstanceType
         OMEROServerContainerCPU: !Ref OMEROServerContainerCPUSize
         OMEROServerContainerMemory: !Ref OMEROServerContainerMemorySize
+        OMEROServerContainerImage: !Ref OMEROServerContainerImageParam
+        OMEROWebContainerImage: !Ref OMEROWebContainerImageParam
         DBUser: !Ref RDSDBUserName
         EFSSecurityGroup:
           Fn::GetAtt: 

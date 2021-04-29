@@ -69,6 +69,12 @@ Parameters:
     Type: Number
     Default: 10240
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
+  OMEROServerContainerImage:
+    Type: String 
+    Default: openmicroscopy/omero-server:latest
+  OMEROWebContainerImage:
+    Type: String 
+    Default: openmicroscopy/omero-web-standalone:latest
   DBUser:
     Type: String
     Default: omero
@@ -324,7 +330,7 @@ Resources:
             - Name: ROOTPASS
               Value: omero
           Essential: true
-          Image: openmicroscopy/omero-server:5.6
+          Image: !Ref OMEROServerContainerImage
           LinuxParameters: {}
           LogConfiguration:
             LogDriver: awslogs
@@ -552,7 +558,7 @@ Resources:
                   - .compute.internal
                   - 'omero.local'
           Essential: true
-          Image: openmicroscopy/omero-web-standalone:5.6
+          Image: !Ref OMEROWebContainerImage
           LinuxParameters: {}
           LogConfiguration:
             LogDriver: awslogs

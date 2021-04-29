@@ -36,6 +36,12 @@ Parameters:
   NumberofWebInstances:
     Type: Number
     Default: 2
+  OMEROServerContainerImage:
+    Type: String 
+    Default: openmicroscopy/omero-server:latest
+  OMEROWebContainerImage:
+    Type: String 
+    Default: openmicroscopy/omero-web-standalone:latest
   OMEROWebContainerCPU:
     Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
     Type: Number
@@ -339,7 +345,7 @@ Resources:
             - Name: ROOTPASS
               Value: omero
           Essential: true
-          Image: openmicroscopy/omero-server:5.6
+          Image: !Ref OMEROServerContainerImage
           LinuxParameters: {}
           LogConfiguration:
             LogDriver: awslogs
@@ -507,7 +513,7 @@ Resources:
                   - .compute.internal
                   - 'omero.local'
           Essential: true
-          Image: openmicroscopy/omero-web-standalone:5.6
+          Image: !Ref OMEROWebContainerImage
           LinuxParameters: {}
           LogConfiguration:
             LogDriver: awslogs
