@@ -7,7 +7,9 @@ You can build customized container images for [OMERO.web](https://github.com/ome
 
 It will build the docker image and upload it to [AWS ECR](https://aws.amazon.com/ecr/). Take a note of the image URL after uploading:
 
-<img src="../Figures/omerowebimageurl.png" width="300">
+<img src="../Figures/omerowebimageurl.png" width="500">
+
+and fill it in the CloudFormation deployment parameters: OMEROWebContainerImageParam or OMEROServerContainerImageParam
 
 
 ### Disclaimer
