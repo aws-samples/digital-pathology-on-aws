@@ -1,0 +1,69 @@
+{% extends "webgateway/core_html.html" %}
+{% load i18n %}
+
+{% block link %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static "webclient/css/layout.css"|add:url_suffix %}" type="text/css" />
+    <link rel="stylesheet" href="{% static "webgateway/css/ome.login.css"|add:url_suffix %}" type="text/css" />
+{% endblock %}
+
+{% block title %}
+    {% trans "OMERO.web - Login" %}
+{% endblock %}
+
+{% block head %}
+    {{ block.super }}
+    {% include "webgateway/base/includes/shortcut_icon.html" %}
+{% endblock %}
+
+{% block body %}
+
+<div style="margin: auto">
+    <div class="login-logos">
+        <img style="width:300px; height: 400px;"
+            src="https://www.slu.edu/marcom/tools-downloads/imgs/slu-primary-blue-rgb.png" />
+        <h1 style="font-family: 'Helvetica Neue', sans-serif; font-size: 28px; font-weight: bold; text-align: center">Saint Louis University</h1>
+        <h1 style="font-family: 'Helvetica Neue', sans-serif; font-size: 28px; font-weight: bold; text-align: center">Research Microscopy and Histology Core</h1>
+        <h1 style="font-family: 'Helvetica Neue', sans-serif; font-size: 28px; font-weight: bold; text-align: center">Image Server</h1>
+    </div>
+
+    <div id="login">
+        {% block login %}
+        <form class="standard_form inlined" action="{% url 'weblogin' %}{% if url %}?{{url}}{% endif %}" method="post">{% csrf_token %}
+    			
+                <select name="server" id="id_server" style="visibility: hidden;">
+                    <option value="1">default server</option>
+                </select>
+                <div>
+                    <label for="id_username" style="visibility: hidden;">Username</label>
+                    <input placeholder="Username" type="text" name="username" size="22" autofocus="autofocus" maxlength="50" required id="id_username" />
+                </div>
+                
+                <div>
+                    <label for="id_username" style="visibility: hidden;">Password</label>
+                    <input placeholder="Password" type="password" name="password" size="22" autocomplete="off" maxlength="50" required id="id_password" />
+                </div>
+
+
+            	<input type="submit" value="Login" />
+
+                <div>
+                    <p><a href="{% url 'waforgottenpassword' %}">Forgot your password?</a></p>
+                </div>
+        </form>
+
+        {% endblock %}
+    </div>
+
+    <div id="login-footer">
+    	<p>
+    		OMERO.web {{ version }}<br/>
+    		&copy; 2007-{{ build_year }} University of Dundee &amp; Open Microscopy Environment<br/>
+    		OMERO is distributed under the terms of the GNU GPL.
+    		For more information, visit <a href="https://www.openmicroscopy.org">openmicroscopy.org</a><br/>
+
+            <img src="{% static 'webgateway/img/OME_logo_grey_110.png' %}"/>
+        </p>
+    </div>
+</div>
+{% endblock %}

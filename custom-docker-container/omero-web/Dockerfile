@@ -13,10 +13,9 @@ RUN /opt/omero/web/venv3/bin/pip install \
         omero-webtagging-autotag \
         omero-webtagging-tagsearch \
         whitenoise \
-        omero-virtual-microscope \
-        omero-fpbioimage \
-        omero-gallery 
+        omero-fpbioimage 
 
 ADD 01-default-webapps.omero /opt/omero/web/config/
+ADD custom_login.html /opt/omero/web/config/
 
 USER omero-web

@@ -1,14 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Conditions:
-  CreateLoadBalancer: !Equals
-    - ''
-    - !Ref 'ParameterLoadBalancerARN'
-Description: CloudFormation template to deploy OMERO Web and Server on AWS ECS
 
 Parameters:
-  ParameterLoadBalancerARN:
-    Description: Name of the LoadBalancer to connect to (optional)
-    Type: String
   VPCID:
     Description: ID of the VPC
     Type: AWS::EC2::VPC::Id
@@ -18,15 +10,18 @@ Parameters:
   PublicSubnet2Id:
     Description: SubnetId, for Availability Zone 2 in the region in your VPC. None of OMERO Server instance is deployed in this subnet.
     Type: AWS::EC2::Subnet::Id
+  PrivateSubnet1Id:
+    Description: SubnetId, for Availability Zone 1 in the region in your VPC
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnet2Id:
+    Description: SubnetId, for Availability Zone 2 in the region in your VPC
+    Type: AWS::EC2::Subnet::Id
   OmeroSecurityGroup:
     Description: Security group for OMERO web and service containers
     Type: AWS::EC2::SecurityGroup::Id 
   EFSSecurityGroup:
     Description: Security group for EFS
     Type: AWS::EC2::SecurityGroup::Id 
-  KeyName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: Name of an existing EC2 KeyPair to enable SSH access to the ECS instances.
   EFSFileSystem:
     Description: The ID of the EFS volume
     Type: String
@@ -49,16 +44,34 @@ Parameters:
     Type: Number
     Default: 4096
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
-  InstanceType:
-    Description: EC2 instance type
+  OMEROServerContainerImage:
+    Type: String 
+    Default: openmicroscopy/omero-server:latest
+  OMEROWebContainerImage:
+    Type: String 
+    Default: openmicroscopy/omero-web-standalone:latest
+  ContainerOnEC2:
+    Type: String 
+    Default: N 
+    Description: will the containers be hosted on ECS EC2 or Fargate launch type
+    AllowedValues: [Y, N]
+  KeyName:
     Type: String
-    Default: m4.xlarge
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the EC2 instances. OPTIONAL only for EC2 launch type.
+  InstanceType:
+    Description: EC2 instance type. OPTIONAL only for EC2 launch type.
+    Type: String
+    Default: m4.large
     AllowedValues: [t2.large, m3.large,
       m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
       c4.large, c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, c3.large, c3.xlarge,
       c3.2xlarge, c3.4xlarge, c3.8xlarge, r3.large, r3.xlarge, r3.2xlarge, r3.4xlarge,
       r3.8xlarge, i2.xlarge, i2.2xlarge, i2.4xlarge, i2.8xlarge]
     ConstraintDescription: Please choose a valid instance type.
+  NumberofEC2Instances:
+    Description: Number of EC2 instance to run container in ECS cluster. OPTIONAL only for EC2 lanuch type.
+    Type: Number
+    Default: 3
   OMEROServerContainerCPU:
     Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
     Type: Number
@@ -69,12 +82,6 @@ Parameters:
     Type: Number
     Default: 10240
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
-  OMEROServerContainerImage:
-    Type: String 
-    Default: openmicroscopy/omero-server:latest
-  OMEROWebContainerImage:
-    Type: String 
-    Default: openmicroscopy/omero-web-standalone:latest
   DBUser:
     Type: String
     Default: omero
@@ -84,6 +91,15 @@ Parameters:
     Type: String
     Description: OMERO Database Password
     Default: RDSDatabaseSecret
+  ExistingHostedZoneId:
+    Description: Existing HostedZone for Registered Domain used for ACM Certificate
+    Type: AWS::Route53::HostedZone::Id
+  FullDomainName:
+    Description: Enter the Fully Qualified Domain Nanme for ACM Certificate 
+    Type: String
+
+Conditions:
+  runContainerOnEC2: !Equals [ !Ref 'ContainerOnEC2', 'Y' ]
 
 Mappings:
   AWSRegionToAMI:
@@ -147,7 +163,7 @@ Mappings:
       AccountId: '638102146993'
     eu-central-1:
       AccountId: '054676820928'
-      
+
 Resources:
   CloudMap:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
@@ -164,6 +180,8 @@ Resources:
           - TTL: 60
             Type: A
         RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
       Name: omeroweb
       NamespaceId: !Ref 'CloudMap'
   OmeroserverServiceDiscoveryEntry:
@@ -175,6 +193,8 @@ Resources:
           - TTL: 60
             Type: A
         RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
       Name: omeroserver
       NamespaceId: !Ref 'CloudMap'
   
@@ -189,7 +209,6 @@ Resources:
         - Key: project
           Value: omero-on-aws
   OMEROLoadBalancer:
-    Condition: CreateLoadBalancer
     DependsOn:
       - LBAccessLogBucket
       - LBAccessLogBucketPolicy
@@ -203,10 +222,12 @@ Resources:
       Subnets:
         - !Ref 'PublicSubnet1Id'
         - !Ref 'PublicSubnet2Id'
+      SecurityGroups:
+        - !Ref OmeroSecurityGroup
       Tags:
         - Key: project
           Value: omero-on-aws
-      Type: network
+      Type: application
       LoadBalancerAttributes:
         - Key: access_logs.s3.enabled
           Value: true
@@ -264,7 +285,7 @@ Resources:
     Type: AWS::EFS::MountTarget
     Properties:
       FileSystemId: !Ref EFSFileSystem
-      SubnetId: !Ref PublicSubnet1Id
+      SubnetId: !Ref PrivateSubnet1Id
       SecurityGroups:
         - !Ref EFSSecurityGroup
   NFSAccessPoint:
@@ -289,14 +310,17 @@ Resources:
       DeploymentController:
         Type: ECS
       DesiredCount: 1
-      LaunchType: EC2
+      LaunchType: !If
+        - runContainerOnEC2
+        - 'EC2'
+        - 'FARGATE'
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
           SecurityGroups:
             - !Ref OmeroSecurityGroup
           Subnets:
-            - !Ref 'PublicSubnet1Id'
+            - !Ref 'PrivateSubnet1Id'
       PropagateTags: SERVICE
       SchedulingStrategy: REPLICA
       ServiceRegistries:
@@ -364,7 +388,10 @@ Resources:
       Family: omero-server
       NetworkMode: awsvpc
       RequiresCompatibilities:
-        - EC2
+        - !If
+          - runContainerOnEC2
+          - 'EC2'
+          - 'FARGATE'
   OmeroserverTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -407,6 +434,7 @@ Resources:
                   StringEquals:
                     elasticfilesystem:AccessPointArn: !Ref NFSAccessPoint
                 Effect: Allow
+                Principal: {} 
                 Resource:
                   - !Join
                     - ''
@@ -423,15 +451,17 @@ Resources:
         Value: omeroserver
   ECSAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: runContainerOnEC2
     DependsOn:
       - MountTarget
     Properties:
       VPCZoneIdentifier:
-        - !Ref PublicSubnet1Id
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
       LaunchConfigurationName: !Ref 'ContainerInstances'
       MinSize: '1'
-      MaxSize: '1'
-      DesiredCapacity: '1'
+      MaxSize: '4'
+      DesiredCapacity: !Ref NumberofEC2Instances
     CreationPolicy:
       ResourceSignal:
         Timeout: PT15M
@@ -440,13 +470,17 @@ Resources:
         WillReplace: 'true'
   ContainerInstances:
     Type: AWS::AutoScaling::LaunchConfiguration
+    Condition: runContainerOnEC2
     Properties:
       ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMIID]
       SecurityGroups:
-            - !Ref OmeroSecurityGroup
+        - !Ref OmeroSecurityGroup
       InstanceType: !Ref 'InstanceType'
       IamInstanceProfile: !Ref 'EC2InstanceProfile'
-      KeyName: !Ref 'KeyName'
+      KeyName: !If
+        - runContainerOnEC2
+        - !Ref 'KeyName'
+        - !Ref 'AWS::NoValue'
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
@@ -456,9 +490,10 @@ Resources:
           yum install java-11-amazon-corretto-headless -y
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  
           unzip awscliv2.zip  
-          ./aws/install 
+          ./aws/install
   EC2Role:
     Type: AWS::IAM::Role
+    Condition: runContainerOnEC2
     Properties:
       AssumeRolePolicyDocument:
         Statement:
@@ -480,6 +515,7 @@ Resources:
         Value: omeroserver
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
+    Condition: runContainerOnEC2
     Properties:
       Path: /
       Roles: [!Ref 'EC2Role']
@@ -487,7 +523,8 @@ Resources:
   OmerowebService:
     Type: AWS::ECS::Service
     DependsOn:
-      - OmerowebTCP4080Listener
+      - OmerowebHTTPSListener
+      - OmerowebHTTPListener
     Properties:
       Cluster: !Ref 'OMEROECSCluster'
       DeploymentConfiguration:
@@ -496,19 +533,22 @@ Resources:
       DeploymentController:
         Type: ECS
       DesiredCount: !Ref NumberofWebInstances
-      LaunchType: FARGATE
+      LaunchType: !If
+        - runContainerOnEC2
+        - 'EC2'
+        - 'FARGATE'
       LoadBalancers:
         - ContainerName: omeroweb
           ContainerPort: 4080
           TargetGroupArn: !Ref 'OmerowebTCP4080TargetGroup'
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: ENABLED
+          AssignPublicIp: DISABLED
           SecurityGroups:
             - !Ref OmeroSecurityGroup
           Subnets:
-            - !Ref 'PublicSubnet1Id'
-            - !Ref 'PublicSubnet2Id'
+            - !Ref 'PrivateSubnet1Id'
+            - !Ref 'PrivateSubnet2Id'
       PropagateTags: SERVICE
       SchedulingStrategy: REPLICA
       ServiceRegistries:
@@ -520,30 +560,77 @@ Resources:
           Value: omeroweb
       TaskDefinition: !Ref 'OmerowebTaskDefinition'
   
-  OmerowebTCP4080Listener:
+  HostedZoneRecord:
+    DependsOn: 
+      - LoadBalancerSSLCert
+    Type: AWS::Route53::RecordSet
+    Properties: 
+      HostedZoneId: !Ref ExistingHostedZoneId
+      Type: A
+      Name: !Ref FullDomainName
+      AliasTarget:
+        DNSName: !GetAtt 'OMEROLoadBalancer.DNSName'
+        HostedZoneId: !GetAtt 'OMEROLoadBalancer.CanonicalHostedZoneID'
+
+  LoadBalancerSSLCert:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref FullDomainName
+      DomainValidationOptions:
+            - DomainName: !Ref FullDomainName
+              HostedZoneId: !Ref ExistingHostedZoneId
+      ValidationMethod: DNS
+      CertificateTransparencyLoggingPreference: DISABLED
+
+  OmerowebHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+        - CertificateArn: !Ref LoadBalancerSSLCert
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref 'OmerowebTCP4080TargetGroup'
+      LoadBalancerArn: !Ref 'OMEROLoadBalancer'
+      Port: 443
+      Protocol: HTTPS
+  OmerowebHTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
-        - ForwardConfig:
-            TargetGroups:
-              - TargetGroupArn: !Ref 'OmerowebTCP4080TargetGroup'
-          Type: forward
-      LoadBalancerArn: !If
-        - CreateLoadBalancer
-        - !Ref 'OMEROLoadBalancer'
-        - !Ref 'ParameterLoadBalancerARN'
-      Port: 4080
-      Protocol: TCP
+      - Type: redirect
+        RedirectConfig:
+          Protocol: HTTPS
+          Port: '443'
+          Host: '#{host}'
+          Path: /#{path}
+          Query: '#{query}'
+          StatusCode: HTTP_301
+      LoadBalancerArn: !Ref 'OMEROLoadBalancer'
+      Port: 80
+      Protocol: HTTP
   OmerowebTCP4080TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Port: 4080
-      Protocol: TCP
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPCID
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: 4080
+      HealthCheckPath: /index/
+      Matcher:
+        HttpCode: 200-302
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: 86500
       Tags:
         - Key: project
           Value: omero-on-aws
-      TargetType: ip
-      VpcId: !Ref VPCID
   OmerowebTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -577,7 +664,10 @@ Resources:
       Family: omero-web
       NetworkMode: awsvpc
       RequiresCompatibilities:
-        - FARGATE
+        - !If
+          - runContainerOnEC2
+          - 'EC2'
+          - 'FARGATE'
   OmerowebTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
