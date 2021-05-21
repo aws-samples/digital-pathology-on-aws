@@ -40,7 +40,7 @@ Metadata:
           - DBECSPrivateSubnet1Id
           - DBECSPrivateSubnet2Id
           - LBPublicSubnet1Id
-          - LBPublicSubnet1Id
+          - LBPublicSubnet2Id
           - CIDROMEROSecurityGroup
 
 Parameters:
