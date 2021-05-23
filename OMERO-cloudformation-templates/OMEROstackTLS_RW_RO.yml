@@ -21,8 +21,10 @@ Metadata:
       - Label:
           default: 'ECS'
         Parameters:
+          - ECSContainerOnEC2
           - EC2KeyName
           - EC2InstanceType
+          - NumberofECSEC2Instances
           - LoadBalancerAccessLogBucketName
           - CountofWebInstances
           - OMEROWebContainerCPUSize
@@ -35,26 +37,26 @@ Metadata:
           default: 'Infrastructure'
         Parameters:
           - OMEROVPCID
-          - DatabasePrivateSubnet1Id
-          - DatabasePrivateSubnet2Id
-          - ECSPublicSubnet1Id
-          - ECSPublicSubnet2Id
+          - DBECSPrivateSubnet1Id
+          - DBECSPrivateSubnet2Id
+          - LBPublicSubnet1Id
+          - LBPublicSubnet2Id
           - CIDROMEROSecurityGroup
 
 Parameters:
   OMEROVPCID:
     Description: ID of the VPC
     Type: AWS::EC2::VPC::Id
-  DatabasePrivateSubnet1Id:
+  DBECSPrivateSubnet1Id:
     Description: SubnetId, for Availability Zone 1 in the region in your VPC
     Type: AWS::EC2::Subnet::Id
-  DatabasePrivateSubnet2Id:
+  DBECSPrivateSubnet2Id:
     Description: SubnetId, for Availability Zone 2 in the region in your VPC
     Type: AWS::EC2::Subnet::Id
-  ECSPublicSubnet1Id:
+  LBPublicSubnet1Id:
     Description: SubnetId, for Availability Zone 1 in the region in your VPC. The only one OMERO Server instance is deployed in this subnet.
     Type: AWS::EC2::Subnet::Id
-  ECSPublicSubnet2Id:
+  LBPublicSubnet2Id:
     Description: SubnetId, for Availability Zone 2 in the region in your VPC. None of OMERO Server instance is deployed in this subnet.
     Type: AWS::EC2::Subnet::Id
   CIDROMEROSecurityGroup:
@@ -97,12 +99,6 @@ Parameters:
     Type: Number
     Default: 30
     Description: The number of days for which automated backups are retained. Setting this parameter to a positive number (from 1 to 35) enables backups. Setting this parameter to 0 disables automated backups. 
-  ExistingLoadBalancerARN:
-    Description: Name of the LoadBalancer to connect to (optional)
-    Type: String
-  EC2KeyName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: Name of an existing EC2 KeyPair to enable SSH access to the ECS EC2 instance hosting OMERO Server.
   LoadBalancerAccessLogBucketName:
     Type: String
     Default: omero-ecs-loadbalancer-accesslog
@@ -134,6 +130,18 @@ Parameters:
     Type: Number
     Default: 1
     Description: Number of OMERO ReadOnly Server containers
+  ECSContainerOnEC2:
+    Type: String 
+    Default: N 
+    Description: will the ECS containers be hosted on ECS EC2 or Fargate launch type
+    AllowedValues: [Y, N]
+  EC2KeyName:
+    Type: String
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the ECS EC2 instance hosting OMERO Server. OPTIONAL only for EC2 launch type.
+  NumberofECSEC2Instances:
+    Description: Number of EC2 instance to run container in ECS cluster. OPTIONAL only for EC2 lanuch type.
+    Type: Number
+    Default: 3
   EC2InstanceType:
     Description: EC2 instance type
     Type: String
@@ -169,8 +177,8 @@ Resources:
       Parameters: 
         EFSNameTag: !Ref OMEROStorageEFSNameTag
         VPCID: !Ref OMEROVPCID
-        PrivateSubnet1Id: !Ref DatabasePrivateSubnet1Id
-        PrivateSubnet2Id: !Ref DatabasePrivateSubnet2Id
+        PrivateSubnet1Id: !Ref DBECSPrivateSubnet1Id
+        PrivateSubnet2Id: !Ref DBECSPrivateSubnet2Id
         CIDRblock4OMEROSecurityGroup: !Ref CIDROMEROSecurityGroup
         EnableEFSBackup: !Ref EFSBackup
         EFSStorageInfrequentAcessAfter: !Ref EFSStorageArchiveAfter
@@ -183,12 +191,13 @@ Resources:
   ECScontainerStack:
     Type: 'AWS::CloudFormation::Stack'
     Properties:
-      TemplateURL: https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonEC2EFSRDS_NLBACMDNS_RW_RO.yml
+      TemplateURL: https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonECS_ALBwithTLS_RW_RO.yml
       Parameters:
-        ParameterLoadBalancerARN: !Ref ExistingLoadBalancerARN
         VPCID: !Ref OMEROVPCID
-        PublicSubnet1Id: !Ref ECSPublicSubnet1Id
-        PublicSubnet2Id: !Ref ECSPublicSubnet2Id
+        PublicSubnet1Id: !Ref LBPublicSubnet1Id
+        PublicSubnet2Id: !Ref LBPublicSubnet2Id
+        PrivateSubnet1Id: !Ref DBECSPrivateSubnet1Id
+        PrivateSubnet2Id: !Ref DBECSPrivateSubnet2Id
         KeyName: !Ref EC2KeyName
         LBAccessLogBucketName: !Ref LoadBalancerAccessLogBucketName
         NumberofWebInstances: !Ref CountofWebInstances
@@ -196,7 +205,9 @@ Resources:
         OMEROWebContainerMemory: !Ref OMEROWebContainerMemorySize
         NumberofEC2Instances: !Ref CountofEC2Instances
         NumberofReadOnlyServerInstances: !Ref CountofReadOnlyServerInstances
+        ContainerOnEC2: !Ref ECSContainerOnEC2
         InstanceType: !Ref EC2InstanceType
+        NumberofEC2Instances: !Ref NumberofECSEC2Instances
         OMEROServerContainerCPU: !Ref OMEROServerContainerCPUSize
         OMEROServerContainerMemory: !Ref OMEROServerContainerMemorySize
         OMEROServerContainerImage: !Ref OMEROServerContainerImageParam

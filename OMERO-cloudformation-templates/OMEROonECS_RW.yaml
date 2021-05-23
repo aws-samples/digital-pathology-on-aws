@@ -526,7 +526,7 @@ Resources:
           TargetGroupArn: !Ref 'OmerowebTCP4080TargetGroup'
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: ENABLED
+          AssignPublicIp: DISABLED
           SecurityGroups:
             - !Ref OmeroSecurityGroup
           Subnets:
