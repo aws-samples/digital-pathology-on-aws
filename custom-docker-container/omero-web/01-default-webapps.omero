@@ -25,11 +25,11 @@ config append -- omero.web.apps '"omero_fpbioimage"'
 config append -- omero.web.open_with '["omero_fpbioimage", "fpbioimage_index", {"script_url": "fpbioimage/openwith.js", "supported_objects": ["image"], "label": "FPBioimage"}]'
 
 
-# set up omero web login index page
-config set omero.web.index_template "custom_login.html"
-config append omero.web.template_dirs '"/opt/omero/web/config"'
-config set omero.web.login_view "webindex_custom"
+## set up omero web login index page
+#config set omero.web.index_template "custom_login.html"
+#config append omero.web.template_dirs '"/opt/omero/web/config"'
+#config set omero.web.login_view "webindex_custom"
 
 # Top links
-config set -- omero.web.ui.top_links '[["Data", "webindex", {"title": "Browse Data via Projects, Tags etc"}],["History", "history", {"title": "History"}], ["Mapr", {"viewname": "maprindex_anyvalue"}, {"title": "Find Any Value"}], ["Figure", "figure_index", {"title": "Open Figure in new tab", "target": "_blank"}], ["Help", "https://help.openmicroscopy.org/", {"title":"Open OMERO user guide in a new tab", "target":"new"}], ["Saint Louis University", "https://www.slu.edu/medicine/index.php"]]'
+config set -- omero.web.ui.top_links '[["Data", "webindex", {"title": "Browse Data via Projects, Tags etc"}],["History", "history", {"title": "History"}], ["Mapr", {"viewname": "maprindex_anyvalue"}, {"title": "Find Any Value"}], ["Figure", "figure_index", {"title": "Open Figure in new tab", "target": "_blank"}], ["Help", "https://help.openmicroscopy.org/", {"title":"Open OMERO user guide in a new tab", "target":"new"}]]'
 
