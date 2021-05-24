@@ -141,7 +141,7 @@ Parameters:
   NumberofECSEC2Instances:
     Description: Number of EC2 instance to run container in ECS cluster. OPTIONAL only for EC2 lanuch type.
     Type: Number
-    Default: 3
+    Default: 4
   EC2InstanceType:
     Description: EC2 instance type
     Type: String

@@ -245,6 +245,8 @@ Resources:
       Tags:
         - Key: project
           Value: omero-on-aws
+      SecurityGroups:
+        - !Ref OmeroSecurityGroup
       Type: application
       LoadBalancerAttributes:
         - Key: access_logs.s3.enabled
@@ -342,7 +344,6 @@ Resources:
   
   OmeroserverreadonlyService:
     DependsOn:
-      - OmeroserverreadonlyTCP14064Listener
       - OmeroserverreadwriteService
       - OmerowebService
       - OmeroserverreadonlyTaskDefinition
@@ -359,10 +360,6 @@ Resources:
         - runContainerOnEC2
         - 'EC2'
         - 'FARGATE'
-      LoadBalancers:
-        - ContainerName: omeroserver-readonly
-          ContainerPort: 14064
-          TargetGroupArn: !Ref OmeroserverreadonlyTCP14064TargetGroup
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
@@ -380,28 +377,6 @@ Resources:
         - Key: service
           Value: omeroserver-readonly
       TaskDefinition: !Ref OmeroserverreadonlyTaskDefinition
-  OmeroserverreadonlyTCP14064Listener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-      - ForwardConfig:
-          TargetGroups:
-          - TargetGroupArn:
-              Ref: OmeroserverreadonlyTCP14064TargetGroup
-        Type: forward
-      LoadBalancerArn: !Ref OMEROLoadBalancer
-      Port: 14064
-      Protocol: TCP
-  OmeroserverreadonlyTCP14064TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Port: 14064
-      Protocol: TCP
-      Tags:
-      - Key: project
-        Value: omero-on-aws
-      TargetType: ip
-      VpcId: !Ref VPCID
   OmeroserverreadonlyTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -547,7 +522,6 @@ Resources:
 
   OmeroserverreadwriteService:
     DependsOn:
-      - OmeroserverreadwriteTCP4064Listener
       - OmeroserverreadwriteTaskDefinition
     Type: AWS::ECS::Service
     Properties:
@@ -562,10 +536,6 @@ Resources:
         - runContainerOnEC2
         - 'EC2'
         - 'FARGATE'
-      LoadBalancers:
-        - ContainerName: omeroserver-readwrite
-          ContainerPort: 4064
-          TargetGroupArn: !Ref OmeroserverreadwriteTCP4064TargetGroup
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
@@ -583,27 +553,6 @@ Resources:
       - Key: service
         Value: omeroserver-readwrite
       TaskDefinition: !Ref OmeroserverreadwriteTaskDefinition
-  OmeroserverreadwriteTCP4064Listener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - ForwardConfig:
-            TargetGroups:
-              - TargetGroupArn: !Ref OmeroserverreadwriteTCP4064TargetGroup
-          Type: forward
-      LoadBalancerArn: !Ref OMEROLoadBalancer
-      Port: 4064
-      Protocol: TCP
-  OmeroserverreadwriteTCP4064TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Port: 4064
-      Protocol: TCP
-      Tags:
-        - Key: project
-          Value: omero-on-aws
-      TargetType: ip
-      VpcId: !Ref VPCID
   OmeroserverreadwriteTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -844,7 +793,6 @@ Resources:
           Subnets:
             - !Ref PrivateSubnet1Id
             - !Ref PrivateSubnet2Id
-      PlatformVersion: 1.4.0
       PropagateTags: SERVICE
       SchedulingStrategy: REPLICA
       ServiceRegistries:
@@ -884,10 +832,8 @@ Resources:
       Certificates:
         - CertificateArn: !Ref LoadBalancerSSLCert
       DefaultActions:
-        - ForwardConfig:
-            TargetGroups:
-              - TargetGroupArn: !Ref 'OmerowebTCP4080TargetGroup'
-          Type: forward
+        - Type: forward
+          TargetGroupArn: !Ref 'OmerowebTCP4080TargetGroup'
       LoadBalancerArn: !Ref 'OMEROLoadBalancer'
       Port: 443
       Protocol: HTTPS

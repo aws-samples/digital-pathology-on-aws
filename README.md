@@ -15,32 +15,64 @@ If you have registered or transfer your domain to AWS Route53, you can use the a
 
 #### Deploy OMERO Stack
 
-Current OMERO server only support one writer per mounted network share file. To avoid a race condition between the two instances trying to own a lock on the network file share, we will deploy one read+write OMERO server and one read only OMERO server in the following CloudFormation templates:  
-
 The diagram of Architecture is here:
 
 ![arch](Figures/omero-on-aws-ha.jpg)
 
-The OMERO stack can be deployed using this 1-click deployment:  
-[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackTLS_RW_RO.yml)
+Current OMERO server only support one writer per mounted network share file. To avoid a race condition between the two instances trying to own a lock on the network file share, we will deploy one read+write OMERO server and one read only OMERO server in the following CloudFormation templates using this 1-click deployment:  
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackTLS_RW_RO.yml)  
 
-which will deploy two nested CloudFormation templates, one for storage (EFS and RDS) and one for ECS containers (OMERO web and server). It also deploys a certificate for TLS termination at Application Load Balancer. Majority of parameters already have default values filled and subject to be customized. VPC and Subnets are required, which are from previous deployment. It also requires the Hosted Zone ID and fully qualifed domain name in [AWS Route53](https://aws.amazon.com/route53/), which will be used to validate SSL Certificate issued by [AWS ACM](https://aws.amazon.com/certificate-manager/).
-
+which will deploy two nested CloudFormation templates, one for storage (EFS and RDS) and one for ECS containers (OMERO web and server). It also deploys a certificate for TLS termination at Application Load Balancer. Majority of parameters already have default values filled and subject to be customized. VPC and Subnets are required, which are from previous deployment. It also requires the Hosted Zone ID and fully qualifed domain name in [AWS Route53](https://aws.amazon.com/route53/), which will be used to validate SSL Certificate issued by [AWS ACM](https://aws.amazon.com/certificate-manager/). 
 
 If you do not need the redundency for read only OMERO server, you can deploy a single read+write OMERO server using this 1-click deployment:  
-[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackTLS_RW.yml)
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackTLS_RW.yml)  
 
 Even though the OMERO server is deployed in single instance, you can achieve the Hight Availability (HA) deployment of OMERO web and PostgreSQL database. You have option to deploy the OMERO server container on ECS Fargate or EC2 launch type.
 
-After deploying the stack, you can launch a EC2 instance in one of public subnets in the same VPC, with same OmeroSecurityGroup, and run omero client CLI to import images on that instance. We can install [AWS CLI](https://aws.amazon.com/cli/) and [Amazon Corretto 11](https://docs.aws.amazon.com/corretto/latest/corretto-11-ug/what-is-corretto-11.html) on the EC2 instance using [AWS EC2 user data shell scripts](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html). To import microscopic images to OMERO server, you can connect to the EC2 instance using SSH client (login as ec2-user) or Session Manager (login as ssm-user). Once connected, run the following scripts on the EC2 instance to install [omero-py](https://docs.openmicroscopy.org/omero/5.6.0/developers/Python.html):  
+If you do not have registered domain and associated hosted zone in AWS Route53, you can deploy the following CloudFormation stacks and access to OMERO web through Application Load Balancer DNS name without TLS termination using this 1-click deployment:  
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstack_RW.yml)
+
+
+#### Run OMERO Client on EC2
+
+After deploying the stack, you can launch a EC2 instance and run omero client CLI to import images on that instance. 
+
+First find the EC2 AMI using the following mapping:
+|AWS Region|AMIID|
+| ----------- | ----------- |
+|us-east-1|ami-0c1f575380708aa63|
+|us-east-2|ami-015a2afe7e1a8af56|
+|us-west-1|ami-032a827d612b78a50|
+|us-west-2|ami-05edb14e89a5b98f3|
+|ap-northeast-1|ami-06ee72c3360fd7fad|
+|ap-northeast-2|ami-0cfc5eb79eceeeec9|
+|ap-south-1|ami-078902ae8103daac8|
+|ap-southeast-1|ami-09dd721a797640468|
+|ap-southeast-2|ami-040bd2e2325535b3d|
+|ca-central-1|ami-0a06b44c462364156|
+|eu-central-1|ami-09509e8f8dea8ab83|
+|eu-north-1|ami-015b157d082fd4e0d|
+|eu-west-1|ami-0489c3efb4fe85f5d|
+|eu-west-2|ami-037dd70536680c11f|
+|eu-west-3|ami-0182381900083ba64|
+|sa-east-1|ami-05313c3a9e9148109|
+
+Or following [the instruction](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-ami.html) here to find the current Amazon Linux 2 AMI.
+
+Then follow [this intruction](https://docs.aws.amazon.com/cli/latest/userguide/cli-services-ec2-instances.html) to create new EC2 instance in one of public subnets in the same VPC, with same OmeroSecurityGroup:
+
+```
+aws ec2 run-instances --image-id <AMI ID> --count 1 --instance-type t2.micro --key-name sharedaccount2400 --security-group-ids <OmeroSecurityGroup ID> --subnet-id <Public Subnet ID> --profile <aws cli profile>
+```
+
+To import microscopic images to OMERO server, you can connect to the EC2 instance using SSH client (login as ec2-user) or Session Manager (login as ssm-user). Once connected, run the following scripts on the EC2 instance to install [AWS CLI](https://aws.amazon.com/cli/), [Amazon Corretto 11](https://docs.aws.amazon.com/corretto/latest/corretto-11-ug/what-is-corretto-11.html), and [omero-py](https://docs.openmicroscopy.org/omero/5.6.0/developers/Python.html):  
 
 ``` 
-yum install -y aws-cfn-bootstrap bzip2 unzip
-/opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
-yum install java-11-amazon-corretto-headless -y
+sudo yum install -y aws-cfn-bootstrap bzip2 unzip telnet
+sudo yum install java-11-amazon-corretto-headless -y
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  
 unzip awscliv2.zip  
-./aws/install 
+sudo ./aws/install 
 curl -LO https://anaconda.org/anaconda-adam/adam-installer/4.4.0/download/adam-installer-4.4.0-Linux-x86_64.sh  
 bash adam-installer-4.4.0-Linux-x86_64.sh -b -p ~/adam  
 echo -e '\n# Anaconda Adam\nexport PATH=~/adam/bin:$PATH' >> ~/.bashrc 
@@ -50,6 +82,8 @@ conda install -c anaconda libgcc-ng -y
 conda create -n myenv -c ome python=3.6 bzip2 expat libstdcxx-ng openssl libgcc zeroc-ice36-python omero-py -y   
 source activate myenv
 ```
+
+You can also perform the installation on the EC2 instance using [AWS EC2 user data shell scripts](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html).
 
 You can download image from AWS S3 using command:  
 `aws s3 cp s3://xxxxxxxx.svs .`
@@ -69,8 +103,6 @@ Once you login, you can import whole slide images, like:
 `omero import ./xxxxxx.svs`
 
 
-If you do not have registered domain and associated hosted zone in AWS Route53, you can deploy the following CloudFormation stacks and access to OMERO web through Application Load Balancer DNS name without TLS termination using this 1-click deployment:  
-[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstack_RW.yml)
 
 
 #### Clean up the deployed stack
