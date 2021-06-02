@@ -16,6 +16,9 @@ Parameters:
   PrivateSubnet2Id:
     Description: SubnetId, for Availability Zone 2 in the region in your VPC
     Type: AWS::EC2::Subnet::Id
+  LBSecurityGroup:
+    Description: Security group for Application Load Balancer
+    Type: AWS::EC2::SecurityGroup::Id 
   OmeroSecurityGroup:
     Description: Security group for OMERO web and service containers
     Type: AWS::EC2::SecurityGroup::Id 
@@ -223,7 +226,7 @@ Resources:
         - !Ref 'PublicSubnet1Id'
         - !Ref 'PublicSubnet2Id'
       SecurityGroups:
-        - !Ref OmeroSecurityGroup
+        - !Ref LBSecurityGroup
       Tags:
         - Key: project
           Value: omero-on-aws

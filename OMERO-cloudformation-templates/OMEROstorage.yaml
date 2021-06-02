@@ -87,6 +87,28 @@ Resources:
       SecretId: !Ref RDSDatabaseSecret
       TargetId: !Ref RDSInstance
       TargetType: AWS::RDS::DBInstance
+  LBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Load Balancer Security Group
+      GroupName: LBSecurityGroup
+      SecurityGroupIngress:
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroweb:4080/tcp
+          FromPort: 4080
+          IpProtocol: TCP
+          ToPort: 4080
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroweb:443/https
+          FromPort: 443
+          IpProtocol: TCP
+          ToPort: 443
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: network
+          Value: loadbalancer
+      VpcId: !Ref VPCID
   OmeroSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -113,16 +135,11 @@ Resources:
           FromPort: 22
           IpProtocol: TCP
           ToPort: 22
-        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+        - SourceSecurityGroupId: !Ref LBSecurityGroup
           Description: omeroweb:4080/tcp
           FromPort: 4080
           IpProtocol: TCP
           ToPort: 4080
-        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
-          Description: omeroweb:443/https
-          FromPort: 443
-          IpProtocol: TCP
-          ToPort: 443
       Tags:
         - Key: project
           Value: omero-on-aws
@@ -221,6 +238,8 @@ Resources:
 Outputs:
   EFSFileSystemID:
     Value: !Ref FileSystem
+  LBSecurityGroup:
+    Value: !Ref LBSecurityGroup
   OmeroSecurityGroup:
     Value: !Ref OmeroSecurityGroup
   EFSSecurityGroup:

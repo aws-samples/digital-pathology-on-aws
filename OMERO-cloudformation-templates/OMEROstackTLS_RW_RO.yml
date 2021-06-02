@@ -215,6 +215,10 @@ Resources:
         DBUser: !Ref RDSDBUserName
         ExistingHostedZoneId: !Ref ExistingRoute53HostedZoneId
         FullDomainName: !Ref Route53FullDomainName
+        LBSecurityGroup:
+          Fn::GetAtt: 
+          - StorageStack
+          - Outputs.LBSecurityGroup
         EFSSecurityGroup:
           Fn::GetAtt: 
           - StorageStack

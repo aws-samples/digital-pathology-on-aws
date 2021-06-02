@@ -197,6 +197,10 @@ Resources:
         OMEROServerContainerImage: !Ref OMEROServerContainerImageParam
         OMEROWebContainerImage: !Ref OMEROWebContainerImageParam
         DBUser: !Ref RDSDBUserName
+        LBSecurityGroup:
+          Fn::GetAtt: 
+          - StorageStack
+          - Outputs.LBSecurityGroup
         EFSSecurityGroup:
           Fn::GetAtt: 
           - StorageStack
