@@ -21,6 +21,9 @@ Parameters:
     Type: String
     MinLength: '1'
     Default: OMEROEFSvolume
+  KMSCustomMasterKey:
+    Description: The ID of the AWS KMS customer master key (CMK) to be used to protect the encrypted EFS and RDS storage. OPTIONAL if not specified, the default CMKs for Amazon EFS and RDS are used.
+    Type: String
   EnableEFSBackup:
     Type: String
     Description: whether enable EFS backup or not. EFS backup has extra associated cost.
@@ -67,6 +70,9 @@ Parameters:
     Default: 30
     Description: The number of days for which automated backups are retained. Setting this parameter to a positive number (from 1 to 35) enables backups. Setting this parameter to 0 disables automated backups. 
 
+Conditions:
+  HasKMSCMK: !Not [!Equals ["", !Ref KMSCustomMasterKey]]
+
 Resources:
   RDSDatabaseSecret:
     Type: AWS::SecretsManager::Secret
@@ -95,9 +101,9 @@ Resources:
       SecurityGroupIngress:
         - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
           Description: omeroweb:4080/tcp
-          FromPort: 4080
+          FromPort: 80
           IpProtocol: TCP
-          ToPort: 4080
+          ToPort: 80
         - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
           Description: omeroweb:443/https
           FromPort: 443
@@ -193,6 +199,7 @@ Resources:
     DeletionPolicy: Retain       ## or Delete/Snapshot
     Properties:
       Encrypted: True
+      KmsKeyId: !If [HasKMSCMK, !Ref KMSCustomMasterKey, !Ref AWS::NoValue]
       BackupPolicy: 
         Status: !Ref EnableEFSBackup
       LifecyclePolicies:
@@ -217,6 +224,7 @@ Resources:
       DBInstanceClass: !Ref RDSDBInstanceClass
       StorageType: !Ref RDSDBStorageType
       StorageEncrypted: True
+      KmsKeyId: !If [HasKMSCMK, !Ref KMSCustomMasterKey, !Ref AWS::NoValue]
       AllocatedStorage: !Ref RDSDBAllocatedStorage
       Engine: postgres
       EngineVersion: 11

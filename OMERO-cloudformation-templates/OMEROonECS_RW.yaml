@@ -512,7 +512,7 @@ Resources:
   OmerowebService:
     Type: AWS::ECS::Service
     DependsOn:
-      - OmerowebTCP4080Listener
+      - OmerowebHTTPListener
     Properties:
       Cluster: !Ref 'OMEROECSCluster'
       DeploymentConfiguration:
@@ -548,7 +548,7 @@ Resources:
           Value: omeroweb
       TaskDefinition: !Ref 'OmerowebTaskDefinition'
   
-  OmerowebTCP4080Listener:
+  OmerowebHTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
@@ -557,7 +557,7 @@ Resources:
               - TargetGroupArn: !Ref 'OmerowebTCP4080TargetGroup'
           Type: forward
       LoadBalancerArn: !Ref 'OMEROLoadBalancer'
-      Port: 4080
+      Port: 80
       Protocol: HTTP
   OmerowebTCP4080TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup

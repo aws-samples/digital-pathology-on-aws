@@ -9,6 +9,7 @@ Metadata:
           - OMEROStorageEFSNameTag
           - EFSBackup
           - EFSStorageArchiveAfter
+          - KMSCMKId
       - Label:
           default: 'RDS Database'
         Parameters:
@@ -69,6 +70,9 @@ Parameters:
     Type: String
     MinLength: '1'
     Default: OMEROEFSvolume
+  KMSCMKId:
+    Description: The ID of the AWS KMS customer master key (CMK) to be used to protect the encrypted EFS and RDS storage. OPTIONAL if not specified, the default CMKs for Amazon EFS and RDS are used.
+    Type: String
   EFSBackup:
     Type: String
     Description: whether enable EFS backup or not. EFS backup has extra associated cost.
@@ -174,6 +178,7 @@ Resources:
         PrivateSubnet1Id: !Ref DBECSPrivateSubnet1Id
         PrivateSubnet2Id: !Ref DBECSPrivateSubnet2Id
         CIDRblock4OMEROSecurityGroup: !Ref CIDROMEROSecurityGroup
+        KMSCustomMasterKey: !Ref KMSCMKId
         EnableEFSBackup: !Ref EFSBackup
         EFSStorageInfrequentAcessAfter: !Ref EFSStorageArchiveAfter
         IsDBMultiAZ: !Ref RDSDBMultiAZ
