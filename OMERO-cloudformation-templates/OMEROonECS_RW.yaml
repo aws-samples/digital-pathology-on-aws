@@ -476,10 +476,16 @@ Resources:
           echo ECS_CLUSTER=${OMEROECSCluster} >> /etc/ecs/ecs.config
           yum install -y aws-cfn-bootstrap bzip2 unzip
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
-          yum install java-11-amazon-corretto-headless -y
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  
           unzip awscliv2.zip  
-          ./aws/install 
+          ./aws/install
+          yum install java-11-amazon-corretto-headless -y
+          curl -LO https://anaconda.org/anaconda-adam/adam-installer/4.4.0/download/adam-installer-4.4.0-Linux-x86_64.sh  
+          bash adam-installer-4.4.0-Linux-x86_64.sh -b -p /opt/adam  
+          echo -e '\n# Anaconda Adam\nexport PATH=/opt/adam/bin:$PATH' >> /etc/bashrc 
+          source /etc/bashrc  
+          conda install -c anaconda libstdcxx-ng -y 
+          conda install -c anaconda libgcc-ng -y   
   EC2Role:
     Type: AWS::IAM::Role
     Condition: runContainerOnEC2

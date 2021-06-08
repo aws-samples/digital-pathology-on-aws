@@ -33,57 +33,39 @@ If you do not have registered domain and associated hosted zone in AWS Route53, 
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstack_RW.yml)
 
 
+#### Transfer Image Data into EFS
+
+There are [two primary ways to land image data into EFS file share](https://docs.aws.amazon.com/efs/latest/ug/transfer-data-to-efs.html), using [AWS DataSync](https://docs.aws.amazon.com/efs/latest/ug/gs-step-four-sync-files.html) or [AWS Transfer Family](https://aws.amazon.com/blogs/aws/new-aws-transfer-family-support-for-amazon-elastic-file-system/). AWS DataSync can be used to [transfer data from S3](https://aws.amazon.com/premiumsupport/knowledge-center/datasync-transfer-efs-s3/) as well.
+
+
+#### Run Amazon ECS Exec Command to Import Images
+
+[Amazon ECS Exec command has been enabled](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html) for OMERO.server container service. To run ECS Exec command on Fargate containers, you should have AWS CLI v1.19.28/v2.1.30 or later installed first, and install [SSM plugin for AWS CLI](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html). Grab your ECS task ID of OMERO server on AWS ECS Console, and run:  
+
+```
+aws ecs execute-command --cluster OMEROECSCluster --task <your ECS task Id> --interactive --command "/bin/sh"
+``` 
+
+If you failed to execute the command, you can use the [diagnosis tool](https://github.com/aws-containers/amazon-ecs-exec-checker) to check the issue. 
+
+After login, you will need to change to a non-root OMERO system user, like `omero-server`, and activate the virtual env `source /opt/omero/server/venv3/bin/activate`. After environment activated, you can run [in-place import](https://docs.openmicroscopy.org/omero/5.6.1/sysadmins/in-place-import.html) on images that have already been transfered to the EFS mount, like `omero import --transfer=ln_s <file>`. It is noteworthy that the [OMERO CLI importer](https://omero-guides.readthedocs.io/en/latest/upload/docs/import-cli.html#in-place-import-using-the-cli) has to run on the OMERO server container.
+
+
 #### Run OMERO Client on EC2
 
-After deploying the stack, you can launch a EC2 instance and run omero client CLI to import images on that instance. 
+**It is noteworthy that the OMERO CLI cannot perform in-place import on separate EC2 instance.**
 
-First find the EC2 AMI using the following mapping:
-|AWS Region|AMIID|
-| ----------- | ----------- |
-|us-east-1|ami-0c1f575380708aa63|
-|us-east-2|ami-015a2afe7e1a8af56|
-|us-west-1|ami-032a827d612b78a50|
-|us-west-2|ami-05edb14e89a5b98f3|
-|ap-northeast-1|ami-06ee72c3360fd7fad|
-|ap-northeast-2|ami-0cfc5eb79eceeeec9|
-|ap-south-1|ami-078902ae8103daac8|
-|ap-southeast-1|ami-09dd721a797640468|
-|ap-southeast-2|ami-040bd2e2325535b3d|
-|ca-central-1|ami-0a06b44c462364156|
-|eu-central-1|ami-09509e8f8dea8ab83|
-|eu-north-1|ami-015b157d082fd4e0d|
-|eu-west-1|ami-0489c3efb4fe85f5d|
-|eu-west-2|ami-037dd70536680c11f|
-|eu-west-3|ami-0182381900083ba64|
-|sa-east-1|ami-05313c3a9e9148109|
+If you want to run OMERO CLI client on another EC2 instance to transfer and import images, you can use this 1-click deployment:
 
-Or following [the instruction](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-ami.html) here to find the current Amazon Linux 2 AMI.
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omeroec2loader&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/omero_ec2_uploader_template.yaml) 
 
-Then follow [this intruction](https://docs.aws.amazon.com/cli/latest/userguide/cli-services-ec2-instances.html) to create new EC2 instance in one of public subnets in the same VPC, with same OmeroSecurityGroup:
-
-```
-aws ec2 run-instances --image-id <AMI ID> --count 1 --instance-type t2.micro --key-name sharedaccount2400 --security-group-ids <OmeroSecurityGroup ID> --subnet-id <Public Subnet ID> --profile <aws cli profile>
-```
-
-To import microscopic images to OMERO server, you can connect to the EC2 instance using SSH client (login as ec2-user) or Session Manager (login as ssm-user). Once connected, run the following scripts on the EC2 instance to install [AWS CLI](https://aws.amazon.com/cli/), [Amazon Corretto 11](https://docs.aws.amazon.com/corretto/latest/corretto-11-ug/what-is-corretto-11.html), and [omero-py](https://docs.openmicroscopy.org/omero/5.6.0/developers/Python.html):  
+You can reuse the EFSFileSystem Id, AccessPoint Id, EFSSecurityGroup, OmeroSecurityGroup, PrivateSubnetId, and VPCID from the aforementioned deployments. EC2 instance have installed [AWS CLI](https://aws.amazon.com/cli/), [Amazon Corretto 11](https://docs.aws.amazon.com/corretto/latest/corretto-11-ug/what-is-corretto-11.html), and [omero-py](https://docs.openmicroscopy.org/omero/5.6.0/developers/Python.html), using [AWS EC2 user data shell scripts](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html). To import microscopic images to OMERO server, you can connect to the EC2 instance using Session Manager (login as ssm-user) and run:  
 
 ``` 
-sudo yum install -y aws-cfn-bootstrap bzip2 unzip telnet
-sudo yum install java-11-amazon-corretto-headless -y
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  
-unzip awscliv2.zip  
-sudo ./aws/install 
-curl -LO https://anaconda.org/anaconda-adam/adam-installer/4.4.0/download/adam-installer-4.4.0-Linux-x86_64.sh  
-bash adam-installer-4.4.0-Linux-x86_64.sh -b -p ~/adam  
-echo -e '\n# Anaconda Adam\nexport PATH=~/adam/bin:$PATH' >> ~/.bashrc 
-source ~/.bashrc  
-conda install -c anaconda libstdcxx-ng -y 
-conda install -c anaconda libgcc-ng -y  
+source /etc/bashrc   
 conda create -n myenv -c ome python=3.6 bzip2 expat libstdcxx-ng openssl libgcc zeroc-ice36-python omero-py -y   
 source activate myenv
 ```
-
-You can also perform the installation on the EC2 instance using [AWS EC2 user data shell scripts](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html).
 
 You can download image from AWS S3 using command:  
 `aws s3 cp s3://xxxxxxxx.svs .`
@@ -101,7 +83,6 @@ The default port number is 4064, and default username (root) and password (omero
 Once you login, you can import whole slide images, like:  
 
 `omero import ./xxxxxx.svs`
-
 
 
 

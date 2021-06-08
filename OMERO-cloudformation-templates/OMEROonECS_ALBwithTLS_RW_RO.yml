@@ -494,29 +494,39 @@ Resources:
             Service: ecs-tasks.amazonaws.com
         Version: 2012-10-17
       Policies:
-      - PolicyDocument:
-          Statement:
-          - Action:
-            - elasticfilesystem:ClientMount
-            - elasticfilesystem:ClientWrite
-            - elasticfilesystem:ClientRootAccess
-            Condition:
-              StringEquals:
-                elasticfilesystem:AccessPointArn:
-                  Ref: OmeroAccessPoint
-            Effect: Allow
-            Principal: {}
-            Resource:
-              - !Join
-                - ''
-                - - 'arn:aws:elasticfilesystem:'
-                  - !Ref 'AWS::Region'
-                  - ':'
-                  - !Ref 'AWS::AccountId'
-                  - ':file-system/'
-                  - !Ref OmeroFilesystem
-          Version: 2012-10-17
-        PolicyName: OmeroserverreadonlyOmeroVolumeMountPolicy
+        - PolicyName: OmeroserverreadonlyOmeroVolumeMountPolicy
+          PolicyDocument:
+            Statement:
+            - Action:
+              - elasticfilesystem:ClientMount
+              - elasticfilesystem:ClientWrite
+              - elasticfilesystem:ClientRootAccess
+              Condition:
+                StringEquals:
+                  elasticfilesystem:AccessPointArn:
+                    Ref: OmeroAccessPoint
+              Effect: Allow
+              Principal: {}
+              Resource:
+                - !Join
+                  - ''
+                  - - 'arn:aws:elasticfilesystem:'
+                    - !Ref 'AWS::Region'
+                    - ':'
+                    - !Ref 'AWS::AccountId'
+                    - ':file-system/'
+                    - !Ref OmeroFilesystem
+            Version: 2012-10-17
+        - PolicyName: OmeroserverSSMPolicy
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - ssmmessages:CreateControlChannel
+                  - ssmmessages:CreateDataChannel
+                  - ssmmessages:OpenControlChannel
+                  - ssmmessages:OpenDataChannel
+                Effect: Allow
+                Resource: "*"
       Tags:
         - Key: project
           Value: omero-on-aws
@@ -539,6 +549,7 @@ Resources:
         - runContainerOnEC2
         - 'EC2'
         - 'FARGATE'
+      EnableExecuteCommand: true
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
@@ -596,7 +607,7 @@ Resources:
                 - 'omero.local'
         Essential: true
         Image: !Ref OMEROServerContainerImage
-        LinuxParameters: {}
+        LinuxParameters: { initProcessEnabled: true }
         LogConfiguration:
           LogDriver: awslogs
           Options:
@@ -733,10 +744,16 @@ Resources:
           echo ECS_CLUSTER=${OMEROECSCluster} >> /etc/ecs/ecs.config
           yum install -y aws-cfn-bootstrap bzip2 unzip telnet netstat
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
-          yum install java-11-amazon-corretto-headless -y
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  
           unzip awscliv2.zip  
           ./aws/install
+          yum install java-11-amazon-corretto-headless -y
+          curl -LO https://anaconda.org/anaconda-adam/adam-installer/4.4.0/download/adam-installer-4.4.0-Linux-x86_64.sh  
+          bash adam-installer-4.4.0-Linux-x86_64.sh -b -p /opt/adam  
+          echo -e '\n# Anaconda Adam\nexport PATH=/opt/adam/bin:$PATH' >> /etc/bashrc 
+          source /etc/bashrc  
+          conda install -c anaconda libstdcxx-ng -y 
+          conda install -c anaconda libgcc-ng -y  
   EC2Role:
     Type: AWS::IAM::Role
     Condition: runContainerOnEC2
@@ -827,7 +844,7 @@ Resources:
             - DomainName: !Ref FullDomainName
               HostedZoneId: !Ref ExistingHostedZoneId
       ValidationMethod: DNS
-      CertificateTransparencyLoggingPreference: DISABLED
+      CertificateTransparencyLoggingPreference: ENABLED
 
   OmerowebHTTPSListener:
     Type: AWS::ElasticLoadBalancingV2::Listener

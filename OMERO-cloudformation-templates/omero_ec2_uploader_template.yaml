@@ -1,0 +1,239 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  VPCID:
+    Description: ID of the VPC
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnetId:
+    Description: SubnetId, for Availability Zone 1 in the region in your VPC
+    Type: AWS::EC2::Subnet::Id
+  OmeroSecurityGroup:
+    Description: Security group for OMERO web and service containers
+    Type: AWS::EC2::SecurityGroup::Id 
+  InstanceType:
+    Description: EC2 instance type. OPTIONAL only for EC2 launch type.
+    Type: String
+    Default: m4.large
+    AllowedValues: [t2.large, m3.large,
+      m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
+      c4.large, c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, c3.large, c3.xlarge,
+      c3.2xlarge, c3.4xlarge, c3.8xlarge, r3.large, r3.xlarge, r3.2xlarge, r3.4xlarge,
+      r3.8xlarge, i2.xlarge, i2.2xlarge, i2.4xlarge, i2.8xlarge]
+    ConstraintDescription: Please choose a valid instance type.
+  NumberofEC2Instances:
+    Description: Number of EC2 instance to run container in ECS cluster. OPTIONAL only for EC2 lanuch type.
+    Type: Number
+    Default: 1
+  EFSSecurityGroup:
+    Description: Security group for EFS
+    Type: AWS::EC2::SecurityGroup::Id 
+  EFSFileSystem:
+    Description: The ID of the EFS volume
+    Type: String
+  AccessPoint:
+    Description: The Access Point of the EFS volume
+    Type: String
+  MountPoint:
+    Description: The Linux mount point for the EFS volume
+    Type: String
+    MinLength: '1'
+    Default: myEFSvolume
+
+Mappings:
+  AWSRegionToAMI:
+    us-east-1:
+      AMIID: ami-0c1f575380708aa63
+    us-east-2:
+      AMIID: ami-015a2afe7e1a8af56
+    us-west-1:
+      AMIID: ami-032a827d612b78a50
+    us-west-2:
+      AMIID: ami-05edb14e89a5b98f3
+    ap-northeast-1:
+      AMIID: ami-06ee72c3360fd7fad
+    ap-northeast-2:
+      AMIID: ami-0cfc5eb79eceeeec9
+    ap-south-1:
+      AMIID: ami-078902ae8103daac8
+    ap-southeast-1:
+      AMIID: ami-09dd721a797640468
+    ap-southeast-2:
+      AMIID: ami-040bd2e2325535b3d
+    ca-central-1:
+      AMIID: ami-0a06b44c462364156
+    eu-central-1:
+      AMIID: ami-09509e8f8dea8ab83
+    eu-north-1:
+      AMIID: ami-015b157d082fd4e0d
+    eu-west-1:
+      AMIID: ami-0489c3efb4fe85f5d
+    eu-west-2:
+      AMIID: ami-037dd70536680c11f
+    eu-west-3:
+      AMIID: ami-0182381900083ba64
+    sa-east-1:
+      AMIID: ami-05313c3a9e9148109
+
+Resources:
+
+  MountTarget:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SubnetId: !Ref PrivateSubnetId
+      SecurityGroups: 
+        - !Ref EFSSecurityGroup
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnetId
+      LaunchConfigurationName: !Ref 'LaunchConfiguration'
+      MinSize: '1'
+      MaxSize: '2'
+      DesiredCapacity: !Ref NumberofEC2Instances
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: 'true'
+  LaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          MountConfig:
+          - setup
+          - mount
+        setup:
+          packages:
+            yum:
+              nfs-utils: []
+          files:
+            "/home/ec2-user/post_nfsstat":
+              content: !Sub |
+                #!/bin/bash
+
+                INPUT="$(cat)"
+                CW_JSON_OPEN='{ "Namespace": "EFS", "MetricData": [ '
+                CW_JSON_CLOSE=' ] }'
+                CW_JSON_METRIC=''
+                METRIC_COUNTER=0
+
+                for COL in 1 2 3 4 5 6; do
+
+                 COUNTER=0
+                 METRIC_FIELD=$COL
+                 DATA_FIELD=$(($COL+($COL-1)))
+
+                 while read line; do
+                   if [[ COUNTER -gt 0 ]]; then
+
+                     LINE=`echo $line | tr -s ' ' `
+                     AWS_COMMAND="aws cloudwatch put-metric-data --region ${AWS::Region}"
+                     MOD=$(( $COUNTER % 2))
+
+                     if [ $MOD -eq 1 ]; then
+                       METRIC_NAME=`echo $LINE | cut -d ' ' -f $METRIC_FIELD`
+                     else
+                       METRIC_VALUE=`echo $LINE | cut -d ' ' -f $DATA_FIELD`
+                     fi
+
+                     if [[ -n "$METRIC_NAME" && -n "$METRIC_VALUE" ]]; then
+                       INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+                       CW_JSON_METRIC="$CW_JSON_METRIC { \"MetricName\": \"$METRIC_NAME\", \"Dimensions\": [{\"Name\": \"InstanceId\", \"Value\": \"$INSTANCE_ID\"} ], \"Value\": $METRIC_VALUE },"
+                       unset METRIC_NAME
+                       unset METRIC_VALUE
+
+                       METRIC_COUNTER=$((METRIC_COUNTER+1))
+                       if [ $METRIC_COUNTER -eq 20 ]; then
+                         # 20 is max metric collection size, so we have to submit here
+                         aws cloudwatch put-metric-data --region ${AWS::Region} --cli-input-json "`echo $CW_JSON_OPEN ${!CW_JSON_METRIC%?} $CW_JSON_CLOSE`"
+
+                         # reset
+                         METRIC_COUNTER=0
+                         CW_JSON_METRIC=''
+                       fi
+                     fi
+
+                     COUNTER=$((COUNTER+1))
+                   fi
+
+                   if [[ "$line" == "Client nfs v4:" ]]; then
+                     # the next line is the good stuff
+                     COUNTER=$((COUNTER+1))
+                   fi
+                 done <<< "$INPUT"
+                done
+
+                # submit whatever is left
+                aws cloudwatch put-metric-data --region ${AWS::Region} --cli-input-json "`echo $CW_JSON_OPEN ${!CW_JSON_METRIC%?} $CW_JSON_CLOSE`"
+              mode: '000755'
+              owner: ec2-user
+              group: ec2-user
+            "/home/ec2-user/crontab":
+              content: "* * * * * /usr/sbin/nfsstat | /home/ec2-user/post_nfsstat\n"
+              owner: ec2-user
+              group: ec2-user
+          commands:
+            01_createdir:
+              command: !Sub "mkdir /${MountPoint}"
+        mount:
+          commands:
+            01_mount:
+              command: !Sub >
+                mount -t efs -o tls,accesspoint=${AccessPoint} ${EFSFileSystem}.efs.${AWS::Region}.amazonaws.com:/ /${MountPoint}
+            02_permissions:
+              command: !Sub "chown ec2-user:ec2-user /${MountPoint}"
+    Properties:
+      ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMIID]
+      SecurityGroups:
+            - !Ref OmeroSecurityGroup
+      InstanceType: !Ref 'InstanceType'
+      IamInstanceProfile: !Ref 'EC2InstanceProfile'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum install -y aws-cfn-bootstrap bzip2 unzip
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  
+          unzip awscliv2.zip  
+          ./aws/install
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchConfiguration --configsets MountConfig --region ${AWS::Region}
+          crontab /home/ec2-user/crontab
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource AutoScalingGroup --region ${AWS::Region}
+          yum install java-11-amazon-corretto-headless -y
+          curl -LO https://anaconda.org/anaconda-adam/adam-installer/4.4.0/download/adam-installer-4.4.0-Linux-x86_64.sh  
+          bash adam-installer-4.4.0-Linux-x86_64.sh -b -p /opt/adam  
+          echo -e '\n# Anaconda Adam\nexport PATH=/opt/adam/bin:$PATH' >> /etc/bashrc 
+          source /etc/bashrc  
+          conda install -c anaconda libstdcxx-ng -y 
+          conda install -c anaconda libgcc-ng -y  
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+      Tags:
+      - Key: project
+        Value: omero-on-aws
+      - Key: service
+        Value: omeroloader
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [!Ref 'EC2Role']

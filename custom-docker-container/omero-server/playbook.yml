@@ -1,0 +1,37 @@
+- hosts: localhost
+  roles:
+    - role: ome.omero_server
+      omero_server_python_addons:
+        - "omero-cli-duplicate=={{ omero_cli_duplicate_release }}"
+        - "omero-cli-render=={{ omero_cli_render_release }}"
+        - "omero-metadata=={{ omero_metadata_release }}"
+        - reportlab
+        - markdown
+        - scipy
+        # For "simple frap with figure" script
+        - matplotlib
+  tasks:
+    - name: Add operating system user "importer1"
+      become: true
+      user:
+       name: "importer1"
+       state: present
+       groups: "{{ omero_server_system_managedrepo_group }}"
+       password: "{{ os_system_users_password | password_hash('sha512', 'ome') }}"
+  vars:
+    java_versions: ["11"]
+    omero_server_database_manage: False
+    omero_server_selfsigned_certificates: True
+    omero_server_systemd_setup: False
+    omero_server_system_uid: 1000
+    omero_server_virtualenv: True
+    omero_server_python3: True
+    omero_server_python3_replace_omero: False
+    postgresql_version: "11"
+
+    omero_server_system_managedrepo_group: managed_repo_group
+    omero_server_datadir_managedrepo_mode: u=rwX,g=srwX,o=rX,+t
+    os_system_users_password: "{{ os_system_users_password_override | default('ome') }}"
+    omero_cli_duplicate_release: "{{ omero_cli_duplicate_release_override | default('0.4.0') }}"
+    omero_metadata_release: "{{ omero_metadata_release_overrride | default('0.5.0') }}"
+    omero_cli_render_release: "{{ omero_cli_render_release_override | default('0.6.1') }}"
