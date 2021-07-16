@@ -262,6 +262,9 @@ Resources:
               - !Sub '${LBAccessLogBucket.Arn}/*'
             Principal: 
               Service: delivery.logs.amazonaws.com
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
           - Action:
               - 's3:GetBucketAcl'
             Effect: Allow
@@ -307,6 +310,7 @@ Resources:
         - runContainerOnEC2
         - 'EC2'
         - 'FARGATE'
+      EnableExecuteCommand: true
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
@@ -348,7 +352,7 @@ Resources:
               Value: omero
           Essential: true
           Image: !Ref OMEROServerContainerImage
-          LinuxParameters: {}
+          LinuxParameters: { initProcessEnabled: true }
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -436,6 +440,16 @@ Resources:
                       - !Ref 'AWS::AccountId'
                       - ':file-system/'
                       - !Ref EFSFileSystem
+        - PolicyName: OmeroserverSSMPolicy
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - ssmmessages:CreateControlChannel
+                  - ssmmessages:CreateDataChannel
+                  - ssmmessages:OpenControlChannel
+                  - ssmmessages:OpenDataChannel
+                Effect: Allow
+                Resource: "*"
       Tags:
       - Key: project
         Value: omero-on-aws
@@ -531,6 +545,7 @@ Resources:
         - runContainerOnEC2
         - 'EC2'
         - 'FARGATE'
+      EnableExecuteCommand: true
       LoadBalancers:
         - ContainerName: omeroweb
           ContainerPort: 4080
@@ -603,7 +618,7 @@ Resources:
                   - 'omero.local'
           Essential: true
           Image: !Ref OMEROWebContainerImage
-          LinuxParameters: {}
+          LinuxParameters: { initProcessEnabled: true }
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -618,6 +633,7 @@ Resources:
       Cpu: !Ref OMEROWebContainerCPU
       Memory: !Ref OMEROWebContainerMemory
       ExecutionRoleArn: !Ref 'OmerowebTaskExecutionRole'
+      TaskRoleArn: !Ref OmerowebTaskRole
       Family: omero-web
       NetworkMode: awsvpc
       RequiresCompatibilities:
@@ -644,6 +660,28 @@ Resources:
           Value: omero-on-aws
         - Key: service
           Value: omeroweb
+  OmerowebTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+        Version: '2012-10-17'
+      Policies:
+        - PolicyName: OmerowebSSMPolicy
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - ssmmessages:CreateControlChannel
+                  - ssmmessages:CreateDataChannel
+                  - ssmmessages:OpenControlChannel
+                  - ssmmessages:OpenDataChannel
+                Effect: Allow
+                Resource: "*"
     
 Outputs:
   OMEROLoadBalancerHTTPEnpoint:
