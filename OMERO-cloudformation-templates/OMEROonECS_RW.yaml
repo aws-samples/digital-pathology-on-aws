@@ -690,4 +690,3 @@ Outputs:
       - ''
       - - 'http://'
         - !GetAtt OMEROLoadBalancer.DNSName
-        - ':80'

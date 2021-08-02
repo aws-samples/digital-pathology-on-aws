@@ -1010,6 +1010,5 @@ Outputs:
     Description: The HTTP endpoint of the LoadBalancer
     Value: !Join
       - ''
-      - - 'http://'
+      - - 'https://'
         - !GetAtt OMEROLoadBalancer.DNSName
-        - ':4080'

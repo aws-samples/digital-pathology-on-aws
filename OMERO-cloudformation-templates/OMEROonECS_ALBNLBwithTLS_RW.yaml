@@ -211,13 +211,13 @@ Resources:
       Tags:
         - Key: project
           Value: omero-on-aws
-  OMEROALB:
+  OMEROLoadBalancer:
     DependsOn:
       - LBAccessLogBucket
       - LBAccessLogBucketPolicy
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: OMEROALB
+      Name: OMEROLoadBalancer
       LoadBalancerAttributes:
         - Key: load_balancing.cross_zone.enabled
           Value: "true"
@@ -240,13 +240,13 @@ Resources:
             - - !Ref LBAccessLogBucketName
               - !Ref AWS::AccountId
               - !Ref AWS::Region
-  OMERONLB:
+  OMERONetworkLoadBalancer:
     DependsOn:
       - LBAccessLogBucket
       - LBAccessLogBucketPolicy
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: OMERONLB
+      Name: OMERONetworkLoadBalancer
       Scheme: internet-facing
       Subnets:
         - !Ref 'PublicSubnet1Id'
@@ -332,6 +332,8 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn:
       - OmeroserverTaskDefinition
+      - OmeroserverTCP4064Listener
+      - OmeroserverTCP4063Listener
     Properties:
       Cluster: !Ref 'OMEROECSCluster'
       DeploymentConfiguration:
@@ -377,7 +379,7 @@ Resources:
           TargetGroups:
           - TargetGroupArn: !Ref OmeroserverTCP4064TargetGroup
         Type: forward
-      LoadBalancerArn: !Ref OMERONLB
+      LoadBalancerArn: !Ref OMERONetworkLoadBalancer
       Port: 4064
       Protocol: TCP
   OmeroserverTCP4064TargetGroup:
@@ -398,7 +400,7 @@ Resources:
           TargetGroups:
           - TargetGroupArn: !Ref OmeroserverTCP4063TargetGroup
         Type: forward
-      LoadBalancerArn: !Ref OMERONLB
+      LoadBalancerArn: !Ref OMERONetworkLoadBalancer
       Port: 4063
       Protocol: TCP
   OmeroserverTCP4063TargetGroup:
@@ -632,6 +634,7 @@ Resources:
         - runContainerOnEC2
         - 'EC2'
         - 'FARGATE'
+      EnableExecuteCommand: true
       LoadBalancers:
         - ContainerName: omeroweb
           ContainerPort: 4080
@@ -664,8 +667,8 @@ Resources:
       Type: A
       Name: !Ref FullDomainName
       AliasTarget:
-        DNSName: !GetAtt 'OMEROALB.DNSName'
-        HostedZoneId: !GetAtt 'OMEROALB.CanonicalHostedZoneID'
+        DNSName: !GetAtt 'OMEROLoadBalancer.DNSName'
+        HostedZoneId: !GetAtt 'OMEROLoadBalancer.CanonicalHostedZoneID'
 
   LoadBalancerSSLCert:
     Type: AWS::CertificateManager::Certificate
@@ -685,7 +688,7 @@ Resources:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref 'OmerowebTCP4080TargetGroup'
-      LoadBalancerArn: !Ref 'OMEROALB'
+      LoadBalancerArn: !Ref 'OMEROLoadBalancer'
       Port: 443
       Protocol: HTTPS
   OmerowebHTTPListener:
@@ -700,7 +703,7 @@ Resources:
           Path: /#{path}
           Query: '#{query}'
           StatusCode: HTTP_301
-      LoadBalancerArn: !Ref 'OMEROALB'
+      LoadBalancerArn: !Ref 'OMEROLoadBalancer'
       Port: 80
       Protocol: HTTP
   OmerowebTCP4080TargetGroup:
@@ -741,7 +744,7 @@ Resources:
                   - 'omero.local'
           Essential: true
           Image: !Ref OMEROWebContainerImage
-          LinuxParameters: {}
+          LinuxParameters: { initProcessEnabled: true }
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -756,6 +759,7 @@ Resources:
       Cpu: !Ref OMEROWebContainerCPU
       Memory: !Ref OMEROWebContainerMemory
       ExecutionRoleArn: !Ref 'OmerowebTaskExecutionRole'
+      TaskRoleArn: !Ref 'OmerowebTaskRole'
       Family: omero-web
       NetworkMode: awsvpc
       RequiresCompatibilities:
@@ -782,26 +786,47 @@ Resources:
           Value: omero-on-aws
         - Key: service
           Value: omeroweb
+  OmerowebTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+        Version: '2012-10-17'
+      Policies:
+        - PolicyName: OmerowebSSMPolicy
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - ssmmessages:CreateControlChannel
+                  - ssmmessages:CreateDataChannel
+                  - ssmmessages:OpenControlChannel
+                  - ssmmessages:OpenDataChannel
+                Effect: Allow
+                Resource: "*"
     
 Outputs:
-  OMEROALBHTTPEnpoint:
-    Description: The HTTP endpoint of the OMEROALB
+  OMEROLoadBalancerHTTPEnpoint:
+    Description: The HTTP endpoint of the OMEROLoadBalancer
+    Value: !Join
+      - ''
+      - - 'https://'
+        - !GetAtt OMEROLoadBalancer.DNSName
+  OMERONetworkLoadBalancerHTTPEnpoint4063:
+    Description: The HTTP endpoint of the OMERONetworkLoadBalancer
     Value: !Join
       - ''
       - - 'http://'
-        - !GetAtt OMEROALB.DNSName
-        - ':4080'
-  OMERONLBHTTPEnpoint4063:
-    Description: The HTTP endpoint of the OMERONLB
-    Value: !Join
-      - ''
-      - - 'http://'
-        - !GetAtt OMERONLB.DNSName
+        - !GetAtt OMERONetworkLoadBalancer.DNSName
         - ':4063'
-  OMERONLBHTTPEnpoint4064:
-    Description: The HTTP endpoint of the OMERONLB
+  OMERONetworkLoadBalancerHTTPEnpoint4064:
+    Description: The HTTP endpoint of the OMERONetworkLoadBalancer
     Value: !Join
       - ''
       - - 'http://'
-        - !GetAtt OMERONLB.DNSName
+        - !GetAtt OMERONetworkLoadBalancer.DNSName
         - ':4064'
