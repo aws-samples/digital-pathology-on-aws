@@ -331,6 +331,7 @@ Resources:
   OmeroserverService:
     Type: AWS::ECS::Service
     DependsOn:
+      - OMERONetworkLoadBalancer
       - OmeroserverTaskDefinition
       - OmeroserverTCP4064Listener
       - OmeroserverTCP4063Listener
@@ -384,6 +385,8 @@ Resources:
       Protocol: TCP
   OmeroserverTCP4064TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn:
+      - OMERONetworkLoadBalancer
     Properties:
       Port: 4064
       Protocol: TCP
@@ -405,6 +408,8 @@ Resources:
       Protocol: TCP
   OmeroserverTCP4063TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn:
+      - OMERONetworkLoadBalancer
     Properties:
       Port: 4063
       Protocol: TCP
@@ -620,6 +625,7 @@ Resources:
   OmerowebService:
     Type: AWS::ECS::Service
     DependsOn:
+      - OMEROLoadBalancer
       - OmerowebHTTPSListener
       - OmerowebHTTPListener
     Properties:
