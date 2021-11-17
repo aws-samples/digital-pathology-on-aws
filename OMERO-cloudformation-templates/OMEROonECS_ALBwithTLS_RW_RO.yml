@@ -110,37 +110,37 @@ Conditions:
 Mappings:
   AWSRegionToAMI:
     us-east-1:
-      AMIID: ami-0c1f575380708aa63
+      AMIID: ami-01783fbb0757adced
     us-east-2:
-      AMIID: ami-015a2afe7e1a8af56
+      AMIID: ami-0adc4758ea76442e2
     us-west-1:
-      AMIID: ami-032a827d612b78a50
+      AMIID: ami-00becdb34b62bf459
     us-west-2:
-      AMIID: ami-05edb14e89a5b98f3
+      AMIID: ami-09f043c293281ecd4
     ap-northeast-1:
-      AMIID: ami-06ee72c3360fd7fad
+      AMIID: ami-04bbc04d168366d27
     ap-northeast-2:
-      AMIID: ami-0cfc5eb79eceeeec9
+      AMIID: ami-0273b23020d7a59de
     ap-south-1:
-      AMIID: ami-078902ae8103daac8
+      AMIID: ami-000e4b3f0c9f06ffb
     ap-southeast-1:
-      AMIID: ami-09dd721a797640468
+      AMIID: ami-071fbc655b2398016
     ap-southeast-2:
-      AMIID: ami-040bd2e2325535b3d
+      AMIID: ami-032edebfa34883542
     ca-central-1:
-      AMIID: ami-0a06b44c462364156
+      AMIID: ami-092b596d9b942c4f8
     eu-central-1:
-      AMIID: ami-09509e8f8dea8ab83
+      AMIID: ami-097b8c9927f9a27bc
     eu-north-1:
-      AMIID: ami-015b157d082fd4e0d
+      AMIID: ami-09666749b685f34d5
     eu-west-1:
-      AMIID: ami-0489c3efb4fe85f5d
+      AMIID: ami-015b1508a2ff2c65a
     eu-west-2:
-      AMIID: ami-037dd70536680c11f
+      AMIID: ami-0141564f07476504d
     eu-west-3:
-      AMIID: ami-0182381900083ba64
+      AMIID: ami-04cb3664fdfc392bd
     sa-east-1:
-      AMIID: ami-05313c3a9e9148109
+      AMIID: ami-003a04511c336560c
 
   RegionELBAccountIdMap:
     us-east-1:
@@ -681,7 +681,8 @@ Resources:
             Service: ecs-tasks.amazonaws.com
         Version: 2012-10-17
       Policies:
-      - PolicyDocument:
+      - PolicyName: OmeroserverreadwriteOmeroVolumeMountPolicy
+        PolicyDocument:
           Statement:
           - Action:
             - elasticfilesystem:ClientMount
@@ -702,17 +703,16 @@ Resources:
                   - ':file-system/'
                   - !Ref OmeroFilesystem
           Version: 2012-10-17
-        PolicyName: OmeroserverreadwriteOmeroVolumeMountPolicy
       - PolicyName: OmeroserverSSMPolicy
-          PolicyDocument:
-            Statement:
-              - Action:
-                  - ssmmessages:CreateControlChannel
-                  - ssmmessages:CreateDataChannel
-                  - ssmmessages:OpenControlChannel
-                  - ssmmessages:OpenDataChannel
-                Effect: Allow
-                Resource: "*"
+        PolicyDocument:
+          Statement:
+            - Action:
+                - ssmmessages:CreateControlChannel
+                - ssmmessages:CreateDataChannel
+                - ssmmessages:OpenControlChannel
+                - ssmmessages:OpenDataChannel
+              Effect: Allow
+              Resource: "*"
       Tags:
       - Key: project
         Value: omero-on-aws
