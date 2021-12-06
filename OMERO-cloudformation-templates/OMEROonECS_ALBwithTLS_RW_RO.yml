@@ -67,7 +67,7 @@ Parameters:
   InstanceType:
     Description: EC2 instance type. OPTIONAL only for EC2 launch type.
     Type: String
-    Default: m4.large
+    Default: m4.xlarge
     AllowedValues: [t2.large, m3.large,
       m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
       c4.large, c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, c3.large, c3.xlarge,
@@ -810,10 +810,7 @@ Resources:
       DeploymentController:
         Type: ECS
       DesiredCount: !Ref NumberofWebInstances
-      LaunchType: !If
-        - runContainerOnEC2
-        - 'EC2'
-        - 'FARGATE'
+      LaunchType: 'FARGATE'
       EnableExecuteCommand: true
       LoadBalancers:
         - ContainerName: omeroweb
@@ -958,10 +955,7 @@ Resources:
       Family: omero-on-aws-omeroweb
       NetworkMode: awsvpc
       RequiresCompatibilities:
-        - !If
-          - runContainerOnEC2
-          - 'EC2'
-          - 'FARGATE'
+        - 'FARGATE'
   OmerowebTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:

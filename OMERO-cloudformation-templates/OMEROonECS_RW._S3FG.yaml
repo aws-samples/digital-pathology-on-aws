@@ -16,24 +16,9 @@ Parameters:
   PrivateSubnet2Id:
     Description: SubnetId, for Availability Zone 2 in the region in your VPC
     Type: AWS::EC2::Subnet::Id
-  LBSecurityGroup:
-    Description: Security group for Application Load Balancer
-    Type: AWS::EC2::SecurityGroup::Id 
-  OmeroSecurityGroup:
-    Description: Security group for OMERO web and service containers
-    Type: AWS::EC2::SecurityGroup::Id 
-  EFSSecurityGroup:
-    Description: Security group for EFS
-    Type: AWS::EC2::SecurityGroup::Id 
-  EFSFileSystem:
-    Description: The ID of the EFS volume
-    Type: String
   LBAccessLogBucketName:
     Type: String
     Default: ecs-loadbalancer-accesslog
-  RDSEndpointAddress:
-    Type: String
-    Description: The RDS database endpoinst address
   NumberofWebInstances:
     Type: Number
     Default: 2
@@ -47,13 +32,8 @@ Parameters:
     Type: Number
     Default: 4096
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
-  ContainerOnEC2:
-    Type: String 
-    Default: N 
-    Description: will the containers be hosted on ECS EC2 or Fargate launch type
-    AllowedValues: [Y, N]
   KeyName:
-    Type: String
+    Type: AWS::EC2::KeyPair::KeyName
     Description: Name of an existing EC2 KeyPair to enable SSH access to the EC2 instances. OPTIONAL only for EC2 launch type.
   InstanceType:
     Description: EC2 instance type. OPTIONAL only for EC2 launch type.
@@ -68,7 +48,7 @@ Parameters:
   NumberofEC2Instances:
     Description: Number of EC2 instance to run container in ECS cluster. OPTIONAL only for EC2 lanuch type.
     Type: Number
-    Default: 3
+    Default: 1
   OMEROServerContainerCPU:
     Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
     Type: Number
@@ -90,13 +70,53 @@ Parameters:
     Default: omero
     Description: OMERO Database User
     NoEcho: true
-  RDSDatabaseSecret: 
+  S3FileGatewayIp:
     Type: String
-    Description: OMERO Database Password
-    Default: RDSDatabaseSecret
-
-Conditions:
-  runContainerOnEC2: !Equals [ !Ref 'ContainerOnEC2', 'Y' ]
+    Description: The public IP address of the EC2 instance for S3 file gateway
+  S3BucketName:
+    Type: String 
+    Description: The S3 bucket name for s3 file gateway
+  IsDBMultiAZ:
+    Type: String
+    Default: False
+  CIDRblock4OMEROSecurityGroup:
+    Type: String
+    Default: '0.0.0.0/0'
+  RDSDBInstanceClass:
+    Type: String
+    Default: "db.t3.medium"
+    Description: Database Instance Class. For more information, go to https://aws.amazon.com/rds/instance-types/
+    AllowedValues:
+      - db.t3.medium
+      - db.r4.large
+      - db.r4.xlarge
+      - db.r4.2xlarge
+      - db.r4.4xlarge
+      - db.r4.8xlarge
+      - db.r4.16xlarge
+      - db.r5.large
+      - db.r5.xlarge
+      - db.r5.2xlarge
+      - db.r5.4xlarge
+      - db.r5.8xlarge
+      - db.r5.12xlarge
+      - db.r5.16xlarge
+      - db.r5.24xlarge
+  RDSDBStorageType:
+    Type: String
+    Default: "gp2"
+  RDSDBAllocatedStorage:
+    Type: Number
+    Default: 20
+  DBUser:
+    Type: String
+    Default: omero
+    Description: OMERO Database User
+    NoEcho: true
+  RDSDBBackupRetentionDays:
+    Type: Number
+    Default: 30
+    Description: The number of days for which automated backups are retained. Setting this parameter to a positive number (from 1 to 35) enables backups. Setting this parameter to 0 disables automated backups. 
 
 Mappings:
   AWSRegionToAMI:
@@ -191,6 +211,144 @@ Resources:
       Name: omeroserver
       NamespaceId: !Ref 'CloudMap'
   
+  RDSDatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: RDSDatabaseSecret
+      Description: !Join ['', ['RDS Database Master User Secret ', 'for CloudFormation Stack ', !Ref 'AWS::StackName']]
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+      GenerateSecretString:
+        SecretStringTemplate: !Join ['', ['{"username": "', !Ref DBUser, '"}']]
+        GenerateStringKey: "password"
+        ExcludeCharacters: '"@/\'
+        PasswordLength: 16
+  SMSecretRDSDBAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref RDSDatabaseSecret
+      TargetId: !Ref RDSInstance
+      TargetType: AWS::RDS::DBInstance
+  LBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Load Balancer Security Group
+      GroupName: LBSecurityGroup
+      SecurityGroupIngress:
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroweb:4080/tcp
+          FromPort: 80
+          IpProtocol: TCP
+          ToPort: 80
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroweb:443/https
+          FromPort: 443
+          IpProtocol: TCP
+          ToPort: 443
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: network
+          Value: loadbalancer
+      VpcId: !Ref VPCID
+  OmeroSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: OMERO Security Group
+      GroupName: OmeroSecurityGroup
+      SecurityGroupIngress:
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroserver:4063/tcp
+          FromPort: 4063
+          IpProtocol: TCP
+          ToPort: 4063
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroserver:4064/tcp
+          FromPort: 4064
+          IpProtocol: TCP
+          ToPort: 4064
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: omeroserver:14064/tcp
+          FromPort: 14064
+          IpProtocol: TCP
+          ToPort: 14064
+        - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
+          Description: ssh
+          FromPort: 22
+          IpProtocol: TCP
+          ToPort: 22
+        - SourceSecurityGroupId: !Ref LBSecurityGroup
+          Description: omeroweb:4080/tcp
+          FromPort: 4080
+          IpProtocol: TCP
+          ToPort: 4080
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: network
+          Value: omero
+      VpcId: !Ref VPCID
+  OmeroSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow communication within omero network
+      GroupId: !Ref OmeroSecurityGroup
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref OmeroSecurityGroup
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS Security Group
+      GroupName: RDSSecurityGroup
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !Ref OmeroSecurityGroup
+          Description: postgres:5432/tcp
+          FromPort: 5432
+          IpProtocol: TCP
+          ToPort: 5432
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: network
+          Value: rds
+      VpcId: !Ref VPCID
+  
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: DBSubnetGroup for RDS instances
+      SubnetIds:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Retain        ## or Delete/Snapshot
+    Properties:
+      DBInstanceIdentifier: omero-instance
+      DBName: omero
+      DBInstanceClass: !Ref RDSDBInstanceClass
+      StorageType: !Ref RDSDBStorageType
+      StorageEncrypted: True
+      AllocatedStorage: !Ref RDSDBAllocatedStorage
+      Engine: postgres
+      EngineVersion: 11
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSDatabaseSecret, ':SecretString:password}}' ]]
+      PubliclyAccessible: False
+      MultiAZ: !Ref IsDBMultiAZ
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+      VPCSecurityGroups: 
+        - !Ref RDSSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      BackupRetentionPeriod: !Ref RDSDBBackupRetentionDays
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+
+
   OMEROECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
@@ -276,23 +434,6 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: /ecs/omero
-  
-  MountTarget:
-    Type: AWS::EFS::MountTarget
-    Properties:
-      FileSystemId: !Ref EFSFileSystem
-      SubnetId: !Ref PrivateSubnet1Id
-      SecurityGroups:
-        - !Ref EFSSecurityGroup
-  NFSAccessPoint:
-    Type: AWS::EFS::AccessPoint
-    Properties: 
-      FileSystemId: !Ref EFSFileSystem
-      PosixUser:
-        Gid: "0"
-        Uid: "0"
-      RootDirectory:
-        Path: "/"
 
   OmeroserverService:
     Type: AWS::ECS::Service
@@ -306,10 +447,7 @@ Resources:
       DeploymentController:
         Type: ECS
       DesiredCount: 1
-      LaunchType: !If
-        - runContainerOnEC2
-        - 'EC2'
-        - 'FARGATE'
+      LaunchType: 'EC2'
       EnableExecuteCommand: true
       NetworkConfiguration:
         AwsvpcConfiguration:
@@ -335,7 +473,7 @@ Resources:
       ContainerDefinitions:
         - Environment:
             - Name: CONFIG_omero_db_host
-              Value: !Ref RDSEndpointAddress
+              Value: !GetAtt 'RDSInstance.Endpoint.Address'
             - Name: CONFIG_omero_db_user
               Value: !Ref DBUser
             - Name: CONFIG_omero_db_pass
@@ -362,7 +500,7 @@ Resources:
           Name: omeroserver
           MountPoints:
             - ContainerPath: /OMERO
-              SourceVolume: my-efs
+              SourceVolume: my-fg
           PortMappings:
             - ContainerPort: 4063
               HostPort: 4063
@@ -371,13 +509,10 @@ Resources:
               HostPort: 4064
               Protocol: tcp
       Volumes:
-        - name: my-efs
-          EFSVolumeConfiguration: 
-            FilesystemId: !Ref EFSFileSystem
-            TransitEncryption: ENABLED
-            AuthorizationConfig: 
-              AccessPointId: !Ref NFSAccessPoint
-              IAM: ENABLED
+        - Name: my-fg
+          Host: 
+            SourcePath: "/S3FileGateway"
+          
       Cpu: !Ref OMEROServerContainerCPU
       Memory: !Ref OMEROServerContainerMemory
       ExecutionRoleArn: !Ref 'OmeroserverTaskExecutionRole'
@@ -385,10 +520,7 @@ Resources:
       Family: omero-server
       NetworkMode: awsvpc
       RequiresCompatibilities:
-        - !If
-          - runContainerOnEC2
-          - 'EC2'
-          - 'FARGATE'
+        - 'EC2'
   OmeroserverTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -420,26 +552,6 @@ Resources:
               Service: ecs-tasks.amazonaws.com
         Version: '2012-10-17'
       Policies:
-        - PolicyName: OmeroserverOmeroVolumeMountPolicy
-          PolicyDocument:
-            Statement:
-              - Action:
-                  - elasticfilesystem:ClientMount
-                  - elasticfilesystem:ClientWrite
-                  - elasticfilesystem:ClientRootAccess
-                Condition:
-                  StringEquals:
-                    elasticfilesystem:AccessPointArn: !Ref NFSAccessPoint
-                Effect: Allow
-                Resource:
-                  - !Join
-                    - ''
-                    - - 'arn:aws:elasticfilesystem:'
-                      - !Ref 'AWS::Region'
-                      - ':'
-                      - !Ref 'AWS::AccountId'
-                      - ':file-system/'
-                      - !Ref EFSFileSystem
         - PolicyName: OmeroserverSSMPolicy
           PolicyDocument:
             Statement:
@@ -457,9 +569,6 @@ Resources:
         Value: omeroserver
   ECSAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
-    Condition: runContainerOnEC2
-    DependsOn:
-      - MountTarget
     Properties:
       VPCZoneIdentifier:
         - !Ref PrivateSubnet1Id
@@ -476,7 +585,6 @@ Resources:
         WillReplace: 'true'
   ContainerInstances:
     Type: AWS::AutoScaling::LaunchConfiguration
-    Condition: runContainerOnEC2
     Properties:
       ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMIID]
       SecurityGroups:
@@ -499,10 +607,12 @@ Resources:
           echo -e '\n# Anaconda Adam\nexport PATH=/opt/adam/bin:$PATH' >> /etc/bashrc 
           source /etc/bashrc  
           conda install -c anaconda libstdcxx-ng -y 
-          conda install -c anaconda libgcc-ng -y   
+          conda install -c anaconda libgcc-ng -y  
+          mkdir /S3FileGateway
+          mount -t nfs -o nolock,hard ${S3FileGatewayIp}:/${S3BucketName} /S3FileGateway 
+          echo "${S3FileGatewayIp}:/${S3BucketName} /S3FileGateway nfs defaults,_netdev,tls 0 0" >> /etc/fstab
   EC2Role:
     Type: AWS::IAM::Role
-    Condition: runContainerOnEC2
     Properties:
       AssumeRolePolicyDocument:
         Statement:
@@ -524,7 +634,6 @@ Resources:
         Value: omeroserver
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
-    Condition: runContainerOnEC2
     Properties:
       Path: /
       Roles: [!Ref 'EC2Role']

@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  Namespace:
+    Description: A string of 4-20 lowercase letters and digits, starting with a letter. Included in resource names, allowing multiple deployments.
+    Default: filegateway
+    Type: String
+    AllowedPattern: "^[a-z]{1}[a-z0-9]{3,19}$"
+    ConstraintDescription: Between 4-20 letters and digits, starting with a letter
+  ParameterVPCId:
+    Description: ID of the VPC
+    Type: AWS::EC2::VPC::Id
+  ParameterSubnetId:
+    Description: SubnetId, for Availability Zone 1 in the region in your VPC. 
+    Type: AWS::EC2::Subnet::Id
+  ParameterAZ:
+    Type: String
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: m4.xlarge
+    AllowedValues: [
+      c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, 
+      c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge, c5.12xlarge, c5.18xlarge, 
+      i3.xlarge, i3.2xlarge, i3.4xlarge, i3.8xlarge, i3.16xlarge,
+      m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge, m4.16xlarge,
+      m5.xlarge, m5.2xlarge, m5.4xlarge, m5.8xlarge, m5.12xlarge, m5.16xlarge, m5.24xlarge, m5.metal,
+      r3.xlarge, r3.2xlarge, r3.4xlarge, r3.8xlarge, r3.16xlarge
+    ]
+    ConstraintDescription: Please choose a valid instance type.
+  EBSVolumeSize:
+    Type: Number
+    Default: 150
+    Description: The Amazon EBS volume size attached to the File Gateway as cache, in GiBs. 
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the EC2 instances. OPTIONAL only for EC2 launch type.
+  FileGatewayBucketName:
+    Type: String
+    Description: The S3 bucket name for s3 file gateway
+    
+Mappings:
+  AWSRegionToAMI:
+    us-east-1:
+      AMIID: ami-056f71af0f2ca2daa
+    us-east-2:
+      AMIID: ami-00be3bc0dc549205b
+    us-west-1:
+      AMIID: ami-026030a0f1dcadbd7
+    us-west-2:
+      AMIID: ami-02749deafe297682f
+    ca-central-1:
+      AMIID: ami-0963db74bdc2e5907
+    eu-central-1:
+      AMIID: ami-09d8ced296c32f4b8
+    eu-north-1:
+      AMIID: ami-024330984f12637fd
+    eu-west-1:
+      AMIID: ami-03f8cfbe95714b1c0
+    eu-west-2:
+      AMIID: ami-02a756b7be3a3ea12
+    eu-west-3:
+      AMIID: ami-06adcff6cf49a17a1
+    ap-northeast-1:
+      AMIID: ami-01f664d75518ebc7b
+    ap-northeast-2:
+      AMIID: ami-0889d8d66cff226d9
+    ap-south-1:
+      AMIID: ami-034c9289984ce22b7
+    ap-southeast-1:
+      AMIID: ami-04684f25b564ccd56
+    ap-southeast-2:
+      AMIID: ami-0d523c332d8a5f4b6
+    sa-east-1:
+      AMIID: ami-03c88482a4233f64f
+
+Resources:
+  FileGatewayBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join
+            - '-'
+            - - !Ref FileGatewayBucketName
+              - !Ref AWS::AccountId
+              - !Ref AWS::Region
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      GroupName: !Sub ${Namespace}-InstanceSecurityGroup-${AWS::AccountId}-${AWS::Region}
+      SecurityGroupIngress:
+        - CidrIp: '0.0.0.0/0'
+          Description: web:80/tcp
+          FromPort: 80
+          IpProtocol: TCP
+          ToPort: 80
+        - CidrIp: '0.0.0.0/0'
+          Description: ssh:22/tcp
+          FromPort: 22
+          IpProtocol: TCP
+          ToPort: 22
+        - CidrIp: '0.0.0.0/0'
+          Description: efs:2049/tcp
+          FromPort: 2049
+          IpProtocol: TCP
+          ToPort: 2049
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "-1"
+      Tags:
+        - Key: project
+          Value: !Sub "${Namespace}-sg"
+      VpcId: !Ref 'ParameterVPCId'
+  
+  EC2S3FileGateway:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMIID]
+      AvailabilityZone: !Ref ParameterAZ
+      SecurityGroupIds: 
+        - !Ref 'InstanceSecurityGroup'
+      SubnetId: !Ref ParameterSubnetId
+      KeyName: !Ref 'KeyName'
+      InstanceType: !Ref 'InstanceType'
+      BlockDeviceMappings: 
+        - DeviceName: /dev/sdb
+          Ebs: 
+            VolumeSize: !Ref EBSVolumeSize
+            VolumeType: "gp2"
+            DeleteOnTermination: true
+      IamInstanceProfile: !Ref 'EC2InstanceProfile'
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: 
+        - !Ref 'EC2Role'
+
+

@@ -19,20 +19,24 @@ The diagram of Architecture is here:
 
 ![arch](Figures/omero-on-aws-ha.jpg)
 
-Current OMERO server only support one writer per mounted network share file. To avoid a race condition between the two instances trying to own a lock on the network file share, we will deploy one read+write OMERO server and one read only OMERO server in the following CloudFormation templates using this 1-click deployment:  
+Current OMERO server only support one writer per mounted network share file. To avoid a race condition between the two instances trying to own a lock on the network file share, we will deploy one read+write OMERO server and one read only OMERO server in the following CloudFormation templates using this 1-click deployment: 
+
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackTLS_RW_RO.yml)  
 
 which will deploy two nested CloudFormation templates, one for storage (EFS and RDS) and one for ECS containers (OMERO web and server). It also deploys a certificate for TLS termination at Application Load Balancer. Majority of parameters already have default values filled and subject to be customized. VPC and Subnets are required, which can be obtained from pre-requisite deployment. It also requires the Hosted Zone ID and fully qualifed domain name in [AWS Route53](https://aws.amazon.com/route53/), which will be used to validate SSL Certificate issued by [AWS ACM](https://aws.amazon.com/certificate-manager/). 
 
 If you do not need the redundency for read only OMERO server, you can deploy a single read+write OMERO server using this 1-click deployment:  
+
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstackTLS_RW.yml)  
 
 Even though the OMERO server is deployed in single instance, you can achieve the Hight Availability (HA) deployment of OMERO web and PostgreSQL database. You have option to deploy the OMERO containers on ECS Fargate or EC2 launch type.
 
 If you want to expose the OMERO server port, i.e. 4064 and 4063, to public, you can deploy a stack with [Network Load Balancer (NLB)](https://aws.amazon.com/elasticloadbalancing/network-load-balancer/) for those two ports using this 1-click deployment:  
+
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3.us-west-1.amazonaws.com/OMERO2LBstackTLS_RW.yml)  
 
 If you do not have registered domain and associated hosted zone in AWS Route53, you can deploy the following CloudFormation stacks and access to OMERO web through Application Load Balancer DNS name without TLS termination using this 1-click deployment:  
+
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstack_RW.yml)
 
 
@@ -47,6 +51,27 @@ There are multiple ways to ingest image data into OMERO on AWS:
 
 There are [two primary ways to land image data into EFS file share](https://docs.aws.amazon.com/efs/latest/ug/transfer-data-to-efs.html), using [AWS DataSync](https://docs.aws.amazon.com/efs/latest/ug/gs-step-four-sync-files.html) or [AWS Transfer Family](https://aws.amazon.com/blogs/aws/new-aws-transfer-family-support-for-amazon-elastic-file-system/). AWS DataSync can be used to [transfer data from S3](https://aws.amazon.com/premiumsupport/knowledge-center/datasync-transfer-efs-s3/) as well.
 
+#### Using Storage Gateway to Cache Images on S3
+
+If you have huge amount of data and I/O performance is not critical, you can save the image files on Amazon S3 and deploy a S3 filegateway on Amazon EC2 to cache a subset of files, and mount a NFS file share instead of Amazon EFS volume to OMERO server. Although Amazon S3 cost significantly less than Amazon EFS, the file gateway instance does have the extra cost. We have done a storage cost comparison for 2TB of data between [Amazon EFS with intelligent tiering](https://calculator.aws/#/estimate?id=bbaac0d5d38a5c2d457848cae5745cdbbfeddb92) and [Amazon S3 with filegateway on EC2](https://calculator.aws/#/estimate?id=688458e015f93858a005995d91597775bf67731f).
+
+You can follow the [instruction to deploy an Amazon S3 File gateway on EC2](https://docs.aws.amazon.com/storagegateway/latest/userguide/ec2-gateway-file.html) to cache the images in S3 bucket to reduce storage cost. Alternatively, you can create the EC2 file gateway instance and S3 bucket using 1-click deployment:
+
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=s3filegatewayinstance&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/ec2s3filegateway.yaml)
+
+Create File Gateway on EC2:
+<img src="Figures/filegateway.png" width="500">
+
+Connect to the EC2 file gateway instance through IP address and activate it. Follow [instruction](https://docs.aws.amazon.com/storagegateway/latest/userguide/create-gateway-file.html#GettingStartedBeginActivateGateway-file) to configure local disks and logging.
+
+Create a [NFS file share](https://docs.aws.amazon.com/storagegateway/latest/userguide/CreatingAnNFSFileShare.html) on top of the S3 bucket created earlier. If you want to upload files to S3 bucket separately and have them visible to the NFS share, you should configure the cache refresh:
+<img src="Figures/fileshare.png" width="300">
+
+Then you will be able to deploy OMERO stack with NFS mount as storage backend through this 1-click deployment:
+
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonECS_RW._S3FG.yaml)
+
+Two parameters were from the S3 file gateway deployment: S3FileGatewayIp and S3BucketName.
 
 #### Run Amazon ECS Exec Command to Import Images
 
@@ -58,7 +83,21 @@ aws ecs execute-command --cluster OMEROECSCluster --task <your ECS task Id> --in
 
 If you failed to execute the command, you can use the [diagnosis tool](https://github.com/aws-containers/amazon-ecs-exec-checker) to check the issue. 
 
-After login, you will need to change to a non-root OMERO system user, like `omero-server`, and activate the virtual env `source /opt/omero/server/venv3/bin/activate`. After environment activated, you can run [in-place import](https://docs.openmicroscopy.org/omero/5.6.1/sysadmins/in-place-import.html) on images that have already been transfered to the EFS mount, like `omero import --transfer=ln_s <file>`. It is noteworthy that the [OMERO CLI importer](https://omero-guides.readthedocs.io/en/latest/upload/docs/import-cli.html#in-place-import-using-the-cli) has to run on the OMERO server container.
+After login, you will need to change to a non-root OMERO system user, like `omero-server`, and activate the virtual env:
+
+```
+source /opt/omero/server/venv3/bin/activate
+``` 
+
+After environment activated, you can run [in-place import](https://docs.openmicroscopy.org/omero/5.6.1/sysadmins/in-place-import.html) on images that have already been transfered to the EFS mount, like `omero import --transfer=ln_s <file>`. It is noteworthy that the [OMERO CLI importer](https://omero-guides.readthedocs.io/en/latest/upload/docs/import-cli.html#in-place-import-using-the-cli) has to run on the OMERO server container.
+
+If you deployed OMERO server on EC2 launch type, you can run docker commands to import images as well. Assuming you want to import all of the images in `/OMERO/downloads`:
+
+```
+containerID=`docker ps | grep omeroserver | awk '{print $1;}'`
+files=`docker exec $containerID bash -c "ls /OMERO/downloads"`
+for FILE in $files; do docker exec $containerID bash -c "source /opt/omero/server/venv3/bin/activate; omero import -s localhost -p 4064 -u root --transfer=ln_s /OMERO/downloads/$FILE"; done
+```
 
 
 #### Run OMERO.insight on AppStream
