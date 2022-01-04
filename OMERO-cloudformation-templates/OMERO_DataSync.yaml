@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Datasync Stack to deploy EFS, DataSync Locations and Task 
+
+Parameters:
+  S3BucketName:
+    Description: Bucket Name
+    Type: String    
+  OMEROSecurityGroup:
+    Description: Security group for OMERO to access EFS
+    Type: AWS::EC2::SecurityGroup::Id 
+  EFSSubnetId:
+    Description: Please provide EFS Subnet Id
+    Type: AWS::EC2::Subnet::Id
+  EFSFileSystemId:
+    Description: Provide EFS File System Arn
+    Type: String
+  S3Path:
+    Type: String 
+    Default: /
+    Description: This subdirectory in Amazon S3 is used to read data from the S3 source location.
+  EFSFolder:
+    Type: String 
+    Default: /
+    Description: This subdirectory in the EFS file system is used to write data to the EFS destination
+
+Resources:
+  SourceLocationS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join
+            - '-'
+            - - !Ref S3BucketName
+              - !Ref AWS::AccountId
+              - !Ref AWS::Region
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+  SourceLocationS3BuckerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: datasync.amazonaws.com
+        Version: '2012-10-17'
+      Policies:
+        - PolicyName: datasync-s3role
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                Effect: Allow
+                Resource:
+                  Fn::GetAtt:
+                    - SourceLocationS3Bucket
+                    - Arn
+              - Action:
+                  - s3:AbortMultipartUpload
+                  - s3:DeleteObject
+                  - s3:GetObject
+                  - s3:ListMultipartUploadParts
+                  - s3:PutObjectTagging
+                  - s3:GetObjectTagging
+                  - s3:PutObject
+                Effect: Allow
+                Resource:
+                  Fn::Join:
+                    - ""
+                    - - Fn::GetAtt:
+                          - SourceLocationS3Bucket
+                          - Arn
+                      - /*
+            Version: "2012-10-17"
+  DataSyncLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      LogGroupName: "/aws/datasync/omero/datasync"
+      RetentionInDays: 7
+  OmeroLocationS3:
+    Type: AWS::DataSync::LocationS3
+    Properties: 
+      S3BucketArn: !GetAtt SourceLocationS3Bucket.Arn
+      S3Config: 
+        BucketAccessRoleArn: !GetAtt SourceLocationS3BuckerRole.Arn
+      S3StorageClass: STANDARD
+      Subdirectory: !Ref S3Path
+  OmeroLocationEFS:
+    Type: AWS::DataSync::LocationEFS
+    DependsOn:
+      - OmeroLocationS3
+      - DataSyncLogGroup
+    Properties: 
+      Ec2Config: 
+        SecurityGroupArns: 
+          - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${OMEROSecurityGroup}
+        SubnetArn: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${EFSSubnetId}
+      EfsFilesystemArn: !Sub arn:aws:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/${EFSFileSystemId}
+      Subdirectory: !Ref EFSFolder
+  OmeroTask:
+    Type: AWS::DataSync::Task
+    DependsOn:
+      - OmeroLocationS3
+      - OmeroLocationEFS
+      - DataSyncLogGroup
+    Properties:
+      SourceLocationArn: !Ref OmeroLocationS3
+      DestinationLocationArn: !Ref OmeroLocationEFS
+      CloudWatchLogGroupArn:  !Select [0, !Split [':*', !GetAtt DataSyncLogGroup.Arn ]]
+      Schedule: 
+        ScheduleExpression: "cron(0 * * * ? *)" 
+      Options: 
+        LogLevel: "TRANSFER"
+        Atime:  "NONE"
+        Mtime:  "NONE"
+        PosixPermissions: "NONE"
+        PreserveDeletedFiles: "PRESERVE"
+        VerifyMode: "ONLY_FILES_TRANSFERRED"
+
+
+  
