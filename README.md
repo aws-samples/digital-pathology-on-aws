@@ -4,7 +4,7 @@
 * [Pre-requisite](#prerequisite)  
 * [Deploy OMERO Stack](#deploy-omero-stack)
 * [OMERO Data Ingestion](#omero-data-ingestion)
-* [OMERO.insight on AppStream](#omero.insight-on-appstream)
+* [OMERO.insight on AppStream](#omero-insight-on-appstream)
 * [OMERO CLI on EC2](#omero-cli-on-ec2)
 * [Clean Up the deployed stack](#clean-up)
 * [Reference](#reference)
@@ -73,6 +73,7 @@ You can follow the [instruction to deploy an Amazon S3 File gateway on EC2](http
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=s3filegatewayinstance&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/ec2s3filegateway.yaml)
 
 Create File Gateway on EC2:
+
 <img src="Figures/filegateway.png" width="500">
 
 Connect to the EC2 file gateway instance through IP address and activate it. Follow [instruction](https://docs.aws.amazon.com/storagegateway/latest/userguide/create-gateway-file.html#GettingStartedBeginActivateGateway-file) to configure local disks and logging.
@@ -129,7 +130,7 @@ bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"'
 You can check if jobs are created successfully, by checking `/opt/omero/server/OMERO.server/var/log/DropBox.log` file, you should see something like: `Started OMERO.fs DropBox client`
 
 
-### OMERO.insight on AppStream
+### OMERO insight on AppStream
 
 Here are steps to run [OMERO.insight](https://docs.openmicroscopy.org/omero/5.6.1/users/clients-overview.html#omero-insight) on Amazon AppStream 2.0, which can import data from Amazon S3 directly into OMERO server:
 
