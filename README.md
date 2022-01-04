@@ -1,7 +1,14 @@
 ## Table of Contents
   
-[OMERO on AWS](#omero-on-aws)  
-[Pre-requisite](#prerequisite)  
+* [OMERO on AWS](#omero-on-aws)  
+* [Pre-requisite](#prerequisite)  
+* [Deploy OMERO Stack](#deploy-omero-stack)
+* [OMERO Data Ingestion](#omero-data-ingestion)
+* [OMERO.insight on AppStream](#omero.insight-on-appstream)
+* [OMERO CLI on EC2](#omero-cli-on-ec2)
+* [Clean Up the deployed stack](#clean-up)
+* [Reference](#reference)
+
 
 ### OMERO on AWS
 
@@ -42,7 +49,7 @@ If you do not have registered domain and associated hosted zone in AWS Route53, 
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstack_RW.yml)
 
 
-### OMERO Data Ingestion
+### OMERO Data Ingestion 
 
 There are multiple ways to ingest image data into OMERO on AWS:
 1. Transfer data directly to EFS mounted to OMERO server through [AWS Transfer Family](https://aws.amazon.com/aws-transfer-family/), from on premises data center or data acquisition facilities.
@@ -51,7 +58,11 @@ There are multiple ways to ingest image data into OMERO on AWS:
 
 #### Transfer Image Data into EFS
 
-There are [two primary ways to land image data into EFS file share](https://docs.aws.amazon.com/efs/latest/ug/transfer-data-to-efs.html), using [AWS DataSync](https://docs.aws.amazon.com/efs/latest/ug/gs-step-four-sync-files.html) or [AWS Transfer Family](https://aws.amazon.com/blogs/aws/new-aws-transfer-family-support-for-amazon-elastic-file-system/). AWS DataSync can be used to [transfer data from S3](https://aws.amazon.com/premiumsupport/knowledge-center/datasync-transfer-efs-s3/) as well.
+There are [two primary ways to land image data into EFS file share](https://docs.aws.amazon.com/efs/latest/ug/transfer-data-to-efs.html), using [AWS DataSync](https://docs.aws.amazon.com/efs/latest/ug/gs-step-four-sync-files.html) or [AWS Transfer Family](https://aws.amazon.com/blogs/aws/new-aws-transfer-family-support-for-amazon-elastic-file-system/). AWS DataSync can be used to [transfer data from S3](https://aws.amazon.com/premiumsupport/knowledge-center/datasync-transfer-efs-s3/) as well. 
+
+You can create a DataSync task to monitor a S3 bucket and copy the files over to the EFS file share mounted to OMERO server using 1-click deployment:
+
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerodatasyncstack&templateURL=https://omero-on-aws.s3.us-west-1.amazonaws.com/OMERO_DataSync.yaml) 
 
 #### Using Storage Gateway to Cache Images on S3
 
@@ -75,11 +86,12 @@ Then you will be able to deploy OMERO stack with NFS mount as storage backend th
 
 Two parameters were from the S3 file gateway deployment: S3FileGatewayIp and S3BucketName.
 
+
 #### Run Amazon ECS Exec Command to Import Images
 
 Once image data landed on EFS, you can access and import them into OMERO using Command Line Interface (CLI). [Amazon ECS Exec command has been enabled](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html) for OMERO.server container service. To run ECS Exec command on Fargate containers, you should have AWS CLI v1.19.28/v2.1.30 or later installed first, and install [SSM plugin for AWS CLI](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html). Grab your ECS task ID of OMERO server on AWS ECS Console, and run:  
 
-```
+```bash
 aws ecs execute-command --cluster OMEROECSCluster --task <your ECS task Id> --interactive --command "/bin/sh"
 ``` 
 
@@ -87,7 +99,7 @@ If you failed to execute the command, you can use the [diagnosis tool](https://g
 
 After login, you will need to change to a non-root OMERO system user, like `omero-server`, and activate the virtual env:
 
-```
+```bash
 source /opt/omero/server/venv3/bin/activate
 ``` 
 
@@ -95,14 +107,29 @@ After environment activated, you can run [in-place import](https://docs.openmicr
 
 If you deployed OMERO server on EC2 launch type, you can run docker commands to import images as well. Assuming you want to import all of the images in `/OMERO/downloads`:
 
-```
+```bash
 containerID=`docker ps | grep omeroserver | awk '{print $1;}'`
 files=`docker exec $containerID bash -c "ls /OMERO/downloads"`
 for FILE in $files; do docker exec $containerID bash -c "source /opt/omero/server/venv3/bin/activate; omero import -s localhost -p 4064 -u root --transfer=ln_s /OMERO/downloads/$FILE"; done
 ```
 
+OMERO supports automated file import using [DropBox](https://omero-guides.readthedocs.io/en/latest/upload/docs/import-dropbox.html). You can create a folder in the `/OMERO/DropBox` directory with folder name as username, like:
+```bash
+mkdir /OMERO/DropBox/root
+```
 
-#### Run OMERO.insight on AppStream
+Then run the following commands to create the automated import job on OMERO server:
+```bash
+export OMERODIR=/opt/omero/server/OMERO.server
+sudo su omero-server
+bin/omero config set omero.fs.watchDir "/OMERO/DropBox"
+bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"'
+```
+
+You can check if jobs are created successfully, by checking `/opt/omero/server/OMERO.server/var/log/DropBox.log` file, you should see something like: `Started OMERO.fs DropBox client`
+
+
+### OMERO.insight on AppStream
 
 Here are steps to run [OMERO.insight](https://docs.openmicroscopy.org/omero/5.6.1/users/clients-overview.html#omero-insight) on Amazon AppStream 2.0, which can import data from Amazon S3 directly into OMERO server:
 
@@ -124,7 +151,8 @@ The OMERO server container instance has been assigned with a private IP address 
 <img src="Figures/ecs-task-omero-server.png" width="500">
 <img src="Figures/omero-server-ip.png" width="500">
 
-#### Run OMERO Client on EC2
+
+### OMERO CLI on EC2
 
 **It is noteworthy that the OMERO CLI cannot perform in-place import on separate EC2 instance.**
 
@@ -134,18 +162,22 @@ If you want to run OMERO CLI client on another EC2 instance to transfer and impo
 
 You can reuse the EFSFileSystem Id, AccessPoint Id, EFSSecurityGroup, OmeroSecurityGroup, PrivateSubnetId, and VPCID from the aforementioned deployments. EC2 instance have installed [AWS CLI](https://aws.amazon.com/cli/), [Amazon Corretto 11](https://docs.aws.amazon.com/corretto/latest/corretto-11-ug/what-is-corretto-11.html), and [omero-py](https://docs.openmicroscopy.org/omero/5.6.0/developers/Python.html), using [AWS EC2 user data shell scripts](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html). To import microscopic images to OMERO server, you can connect to the EC2 instance using Session Manager (login as ssm-user) and run:  
 
-``` 
+```bash
 source /etc/bashrc   
 conda create -n myenv -c ome python=3.6 bzip2 expat libstdcxx-ng openssl libgcc zeroc-ice36-python omero-py -y   
 source activate myenv
 ```
 
 You can download image from AWS S3 using command:  
-`aws s3 cp s3://xxxxxxxx.svs .`
+```bash
+aws s3 cp s3://xxxxxxxx.svs .
+```
 
 and then use [OMERO client CLI](https://docs.openmicroscopy.org/omero/5.6.1/users/cli/index.html) on the EC2 instance to [import the image to OMERO](https://docs.openmicroscopy.org/omero/5.4.8/users/cli/import.html):  
 
-`omero login`  
+```bash
+omero login
+```  
 
 The IP address of the OMERO server can be found in the same way demonstrated above. The default port number is 4064, and default username (root) and password (omero) for OMERO are used here.
 
@@ -154,15 +186,14 @@ Once you login, you can import whole slide images, like:
 `omero import ./xxxxxx.svs`
 
 
-
-#### Clean up the deployed stack
+### Clean Up
 
 1. If you deployed with SSL certificate, go to the HostedZone in Route53 and remove the validation record that route traffic to _xxxxxxxx.xxxxxxxx.acm-validations.aws.
 2. Empty and delete the S3 bucket for Load Balancer access log (LBAccessLogBucket in the template) before deleting the OMERO stack
 3. Manually delete the EFS file system and RDS database. By default the storage retain after the CloudFormation stack is deleted.
 
 
-#### Reference 
+### Reference 
 
 The following information was used to build this solution:
 1. [OMERO Docker](https://github.com/ome/docker-example-omero)
@@ -171,7 +202,6 @@ The following information was used to build this solution:
 4. [Tutorial on EFS for ECS EC2 launch type](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/tutorial-efs-volumes.html).  
 5. [Blog post on EFS for ECS Fargate](https://aws.amazon.com/blogs/aws/amazon-ecs-supports-efs/).  
 6. [Blog post on EFS as Docker volume](https://aws.amazon.com/blogs/compute/amazon-ecs-and-docker-volume-drivers-amazon-ebs/)
-
 
 
 ## Security
