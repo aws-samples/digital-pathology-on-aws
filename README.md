@@ -114,6 +114,8 @@ files=`docker exec $containerID bash -c "ls /OMERO/downloads"`
 for FILE in $files; do docker exec $containerID bash -c "source /opt/omero/server/venv3/bin/activate; omero import -s localhost -p 4064 -u root --transfer=ln_s /OMERO/downloads/$FILE"; done
 ```
 
+#### Automated File Import using OMERO DropBox
+
 OMERO supports automated file import using [DropBox](https://omero-guides.readthedocs.io/en/latest/upload/docs/import-dropbox.html). You can create a folder in the `/OMERO/DropBox` directory with folder name as username, like:
 ```bash
 mkdir /OMERO/DropBox/root
@@ -129,6 +131,15 @@ bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"'
 
 You can check if jobs are created successfully, by checking `/opt/omero/server/OMERO.server/var/log/DropBox.log` file, you should see something like: `Started OMERO.fs DropBox client`
 
+According to the [documentation](https://docs.openmicroscopy.org/omero/5.6.3/sysadmins/dropbox.html), you can add different arguments, like for in-place import: 
+```bash
+bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"; --transfer=ln_s'
+```
+
+or to check if a given path has already been imported beforehand (avoid duplicate import):
+```bash
+bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"; --exclude=clientpath'
+```
 
 ### OMERO insight on AppStream
 
