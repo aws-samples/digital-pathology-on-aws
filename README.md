@@ -89,7 +89,7 @@ Two parameters were from the S3 file gateway deployment: S3FileGatewayIp and S3B
 
 Or if you want to deploy with a domain name and SSL certificate:
 
-[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMERO2LBstackTLS_RW_StorageGateway.yml)
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3.us-west-1.amazonaws.com/OMEROonECS_RW_TLS_S3FG.yml)
 
 
 #### Run Amazon ECS Exec Command to Import Images

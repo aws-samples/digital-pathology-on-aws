@@ -3,7 +3,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Parameters:
   Namespace:
     Description: A string of 4-20 lowercase letters and digits, starting with a letter. Included in resource names, allowing multiple deployments.
-    Default: monai
+    Default: test
     Type: String
     AllowedPattern: "^[a-z]{1}[a-z0-9]{3,19}$"
     ConstraintDescription: Between 4-20 letters and digits, starting with a letter
@@ -44,11 +44,10 @@ Parameters:
   InstanceType:
     Description: EC2 instance type. OPTIONAL only for EC2 launch type.
     Type: String
-    Default: m4.xlarge
+    Default: c5.xlarge
     AllowedValues: [t2.large, m3.large,
       m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
-      c4.large, c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, c3.large, c3.xlarge,
-      c3.2xlarge, c3.4xlarge, c3.8xlarge, r3.large, r3.xlarge, r3.2xlarge, r3.4xlarge,
+      c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.8xlarge, r3.large, r3.xlarge, r3.2xlarge, r3.4xlarge,
       r3.8xlarge, i2.xlarge, i2.2xlarge, i2.4xlarge, i2.8xlarge]
     ConstraintDescription: Please choose a valid instance type.
   NumberofEC2Instances:
@@ -58,13 +57,13 @@ Parameters:
   OMEROServerContainerCPU:
     Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
     Type: Number
-    Default: 4096
+    Default: 2048
     AllowedValues: [256, 512, 1024, 2048, 4096]
   OMEROServerContainerMemory:
     Description: The amount (in MiB) of memory to present to the container. . Memory should be at least two times of vCPU unit according to documentation.
     Type: Number
-    Default: 10240
-    AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
+    Default: 4096
+    AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384]
   OMEROServerContainerImage:
     Type: String 
     Default: openmicroscopy/omero-server:latest
@@ -494,7 +493,7 @@ Resources:
               Value: omero
           Essential: true
           Image: !Ref OMEROServerContainerImage
-          LinuxParameters: { initProcessEnabled: true }
+          LinuxParameters: { InitProcessEnabled: true }
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -516,7 +515,6 @@ Resources:
         - Name: my-fg
           Host: 
             SourcePath: "/S3FileGateway"
-          
       Cpu: !Ref OMEROServerContainerCPU
       Memory: !Ref OMEROServerContainerMemory
       ExecutionRoleArn: !Ref 'OmeroserverTaskExecutionRole'
@@ -525,6 +523,7 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - 'EC2'
+
   OmeroserverTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -728,7 +727,7 @@ Resources:
                   - 'omero.local'
           Essential: true
           Image: !Ref OMEROWebContainerImage
-          LinuxParameters: { initProcessEnabled: true }
+          LinuxParameters: { InitProcessEnabled: true }
           LogConfiguration:
             LogDriver: awslogs
             Options:
