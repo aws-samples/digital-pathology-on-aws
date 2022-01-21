@@ -45,6 +45,9 @@ Metadata:
           - CIDROMEROSecurityGroup
 
 Parameters:
+  StackNamespace: 
+    Type: String
+    Default: test
   OMEROVPCID:
     Description: ID of the VPC
     Type: AWS::EC2::VPC::Id
@@ -184,6 +187,7 @@ Resources:
     Properties:
       TemplateURL: https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonECS_RW.yaml
       Parameters:
+        Namespace: !Ref StackNamespace
         VPCID: !Ref OMEROVPCID
         PublicSubnet1Id: !Ref LBPublicSubnet1Id
         PublicSubnet2Id: !Ref LBPublicSubnet2Id

@@ -47,6 +47,9 @@ Metadata:
           - Route53FullDomainName
 
 Parameters:
+  StackNamespace: 
+    Type: String
+    Default: test
   OMEROVPCID:
     Description: ID of the VPC
     Type: AWS::EC2::VPC::Id
@@ -139,7 +142,7 @@ Parameters:
   NumberofECSEC2Instances:
     Description: Number of EC2 instance to run container in ECS cluster. OPTIONAL only for EC2 lanuch type.
     Type: Number
-    Default: 3
+    Default: 1
   EC2InstanceType:
     Description: ECS EC2 instance type. OPTIONAL only for EC2 launch type.
     Type: String
@@ -192,6 +195,7 @@ Resources:
     Properties:
       TemplateURL: https://omero-on-aws.s3.us-west-1.amazonaws.com/OMEROonECS_ALBNLBwithTLS_RW.yaml
       Parameters:
+        Namespace: !Ref StackNamespace
         VPCID: !Ref OMEROVPCID
         PublicSubnet1Id: !Ref LBPublicSubnet1Id
         PublicSubnet2Id: !Ref LBPublicSubnet2Id

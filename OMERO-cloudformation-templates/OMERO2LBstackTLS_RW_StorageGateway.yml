@@ -11,6 +11,11 @@ Metadata:
           - EFSStorageArchiveAfter
           - KMSCMKId
       - Label:
+          default: 'Storage Gateway'
+        Parameters:
+          - StorageS3FileGatewayIp
+          - StorageS3BucketName
+      - Label:
           default: 'RDS Database'
         Parameters:
           - RDSDBInstanceSize
@@ -43,6 +48,8 @@ Metadata:
           - LBPublicSubnet1Id
           - LBPublicSubnet2Id
           - CIDROMEROSecurityGroup
+          - ExistingRoute53HostedZoneId
+          - Route53FullDomainName
 
 Parameters:
   StackNamespace: 
@@ -108,17 +115,17 @@ Parameters:
     Description: The number of days for which automated backups are retained. Setting this parameter to a positive number (from 1 to 35) enables backups. Setting this parameter to 0 disables automated backups. 
   LoadBalancerAccessLogBucketName:
     Type: String
-    Default: omero-ecs-loadbalancer-accesslog
+    Default: ecs-loadbalancer-accesslog
+  CountofWebInstances:
+    Type: Number
+    Default: 2
+    Description: Number of OMERO Web containers
   OMEROServerContainerImageParam:
     Type: String 
     Default: openmicroscopy/omero-server:latest
   OMEROWebContainerImageParam:
     Type: String 
     Default: openmicroscopy/omero-web-standalone:latest
-  CountofWebInstances:
-    Type: Number
-    Default: 2
-    Description: Number of OMERO Web containers
   OMEROWebContainerCPUSize:
     Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
     Type: Number
@@ -129,14 +136,6 @@ Parameters:
     Type: Number
     Default: 4096
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
-  CountofEC2Instances:
-    Type: Number
-    Default: 2
-    Description: Number of EC2 instances hosting OMERO server containers
-  CountofReadOnlyServerInstances:
-    Type: Number
-    Default: 1
-    Description: Number of OMERO ReadOnly Server containers
   ECSContainerOnEC2:
     Type: String 
     Default: N 
@@ -148,9 +147,9 @@ Parameters:
   NumberofECSEC2Instances:
     Description: Number of EC2 instance to run container in ECS cluster. OPTIONAL only for EC2 lanuch type.
     Type: Number
-    Default: 4
+    Default: 1
   EC2InstanceType:
-    Description: EC2 instance type
+    Description: ECS EC2 instance type. OPTIONAL only for EC2 launch type.
     Type: String
     Default: m4.xlarge
     AllowedValues: [t2.large, m3.large,
@@ -162,12 +161,12 @@ Parameters:
   OMEROServerContainerCPUSize:
     Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
     Type: Number
-    Default: 2048
+    Default: 4096
     AllowedValues: [256, 512, 1024, 2048, 4096]
   OMEROServerContainerMemorySize:
     Description: The amount (in MiB) of memory to present to the container. . Memory should be at least two times of vCPU unit according to documentation.
     Type: Number
-    Default: 4096
+    Default: 10240
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
   ExistingRoute53HostedZoneId:
     Description: Existing HostedZone for Registered Domain used to validate SSL Certificate 
@@ -175,6 +174,12 @@ Parameters:
   Route53FullDomainName:
     Description: Enter the Fully Qualified Domain Name to validate SSL Certificate 
     Type: String
+  StorageS3FileGatewayIp:
+    Type: String
+    Description: The public IP address of the EC2 instance for S3 file gateway
+  StorageS3BucketName:
+    Type: String 
+    Description: The S3 bucket name for s3 file gateway
 
 Resources:
   StorageStack:
@@ -199,7 +204,7 @@ Resources:
   ECScontainerStack:
     Type: 'AWS::CloudFormation::Stack'
     Properties:
-      TemplateURL: https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonECS_ALBwithTLS_RW_RO.yml
+      TemplateURL: https://omero-on-aws.s3.us-west-1.amazonaws.com/OMEROonECS_ALBNLBwithTLS_RW_StorageGateway.yaml
       Parameters:
         Namespace: !Ref StackNamespace
         VPCID: !Ref OMEROVPCID
@@ -212,8 +217,6 @@ Resources:
         NumberofWebInstances: !Ref CountofWebInstances
         OMEROWebContainerCPU: !Ref OMEROWebContainerCPUSize
         OMEROWebContainerMemory: !Ref OMEROWebContainerMemorySize
-        NumberofEC2Instances: !Ref CountofEC2Instances
-        NumberofReadOnlyServerInstances: !Ref CountofReadOnlyServerInstances
         ContainerOnEC2: !Ref ECSContainerOnEC2
         InstanceType: !Ref EC2InstanceType
         NumberofEC2Instances: !Ref NumberofECSEC2Instances
@@ -221,6 +224,8 @@ Resources:
         OMEROServerContainerMemory: !Ref OMEROServerContainerMemorySize
         OMEROServerContainerImage: !Ref OMEROServerContainerImageParam
         OMEROWebContainerImage: !Ref OMEROWebContainerImageParam
+        S3BucketName: !Ref StorageS3BucketName
+        S3FileGatewayIp: !Ref StorageS3FileGatewayIp
         DBUser: !Ref RDSDBUserName
         ExistingHostedZoneId: !Ref ExistingRoute53HostedZoneId
         FullDomainName: !Ref Route53FullDomainName
@@ -236,7 +241,7 @@ Resources:
           Fn::GetAtt: 
           - StorageStack
           - Outputs.OmeroSecurityGroup
-        OmeroFilesystem:
+        EFSFileSystem:
           Fn::GetAtt: 
           - StorageStack
           - Outputs.EFSFileSystemID

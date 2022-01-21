@@ -59,11 +59,6 @@ Parameters:
   OMEROWebContainerImage:
     Type: String 
     Default: openmicroscopy/omero-web-standalone:latest
-  ContainerOnEC2:
-    Type: String 
-    Default: N 
-    Description: will the containers be hosted on ECS EC2 or Fargate launch type
-    AllowedValues: [Y, N]
   KeyName:
     Type: String
     Description: Name of an existing EC2 KeyPair to enable SSH access to the EC2 instances. OPTIONAL only for EC2 launch type.
@@ -80,7 +75,7 @@ Parameters:
   NumberofEC2Instances:
     Description: Number of EC2 instance to run container in ECS cluster. OPTIONAL only for EC2 lanuch type.
     Type: Number
-    Default: 3
+    Default: 1
   OMEROServerContainerCPU:
     Description: The number of cpu units the Amazon ECS container agent will reserve for the container.
     Type: Number
@@ -91,6 +86,12 @@ Parameters:
     Type: Number
     Default: 10240
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
+  S3FileGatewayIp:
+    Type: String
+    Description: The public IP address of the EC2 instance for S3 file gateway
+  S3BucketName:
+    Type: String 
+    Description: The S3 bucket name for s3 file gateway
   DBUser:
     Type: String
     Default: omero
@@ -106,9 +107,6 @@ Parameters:
   FullDomainName:
     Description: Enter the Fully Qualified Domain Nanme for ACM Certificate 
     Type: String
-
-Conditions:
-  runContainerOnEC2: !Equals [ !Ref 'ContainerOnEC2', 'Y' ]
 
 Mappings:
   AWSRegionToAMI:
@@ -245,6 +243,29 @@ Resources:
             - - !Ref LBAccessLogBucketName
               - !Ref Namespace
               - !Ref AWS::AccountId
+  OMERONetworkLoadBalancer:
+    DependsOn:
+      - LBAccessLogBucket
+      - LBAccessLogBucketPolicy
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets:
+        - !Ref 'PublicSubnet1Id'
+        - !Ref 'PublicSubnet2Id'
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+      Type: network
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: true
+        - Key: access_logs.s3.bucket
+          Value: !Join
+            - '-'
+            - - !Ref LBAccessLogBucketName
+              - !Ref Namespace
+              - !Ref AWS::AccountId
   LBAccessLogBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -312,7 +333,10 @@ Resources:
   OmeroserverService:
     Type: AWS::ECS::Service
     DependsOn:
+      - OMERONetworkLoadBalancer
       - OmeroserverTaskDefinition
+      - OmeroserverTCP4064Listener
+      - OmeroserverTCP4063Listener
     Properties:
       Cluster: !Ref 'OMEROECSCluster'
       DeploymentConfiguration:
@@ -321,10 +345,14 @@ Resources:
       DeploymentController:
         Type: ECS
       DesiredCount: 1
-      LaunchType: !If
-        - runContainerOnEC2
-        - 'EC2'
-        - 'FARGATE'
+      LaunchType: 'EC2'
+      LoadBalancers:
+        - ContainerName: omeroserver
+          ContainerPort: 4064
+          TargetGroupArn: !Ref 'OmeroserverTCP4064TargetGroup'
+        - ContainerName: omeroserver
+          ContainerPort: 4063
+          TargetGroupArn: !Ref 'OmeroserverTCP4063TargetGroup'
       EnableExecuteCommand: true
       NetworkConfiguration:
         AwsvpcConfiguration:
@@ -343,7 +371,52 @@ Resources:
         - Key: service
           Value: omeroserver
       TaskDefinition: !Ref 'OmeroserverTaskDefinition'
-  
+  OmeroserverTCP4064Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - ForwardConfig:
+          TargetGroups:
+          - TargetGroupArn: !Ref OmeroserverTCP4064TargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref OMERONetworkLoadBalancer
+      Port: 4064
+      Protocol: TCP
+  OmeroserverTCP4064TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn:
+      - OMERONetworkLoadBalancer
+    Properties:
+      Port: 4064
+      Protocol: TCP
+      TargetType: ip
+      VpcId: !Ref VPCID
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+  OmeroserverTCP4063Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - ForwardConfig:
+          TargetGroups:
+          - TargetGroupArn: !Ref OmeroserverTCP4063TargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref OMERONetworkLoadBalancer
+      Port: 4063
+      Protocol: TCP
+  OmeroserverTCP4063TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn:
+      - OMERONetworkLoadBalancer
+    Properties:
+      Port: 4063
+      Protocol: TCP
+      TargetType: ip
+      VpcId: !Ref VPCID
+      Tags:
+        - Key: project
+          Value: omero-on-aws
   OmeroserverTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -377,7 +450,7 @@ Resources:
           Name: omeroserver
           MountPoints:
             - ContainerPath: /OMERO
-              SourceVolume: my-efs
+              SourceVolume: my-fg
           PortMappings:
             - ContainerPort: 4063
               HostPort: 4063
@@ -386,13 +459,11 @@ Resources:
               HostPort: 4064
               Protocol: tcp
       Volumes:
-        - name: my-efs
-          EFSVolumeConfiguration: 
-            FilesystemId: !Ref EFSFileSystem
-            TransitEncryption: ENABLED
-            AuthorizationConfig: 
-              AccessPointId: !Ref NFSAccessPoint
-              IAM: ENABLED
+        Volumes:
+          - Name: my-fg
+            Host: 
+              SourcePath: "/S3FileGateway"
+              
       Cpu: !Ref OMEROServerContainerCPU
       Memory: !Ref OMEROServerContainerMemory
       ExecutionRoleArn: !Ref 'OmeroserverTaskExecutionRole'
@@ -400,10 +471,7 @@ Resources:
       Family: omero-server
       NetworkMode: awsvpc
       RequiresCompatibilities:
-        - !If
-          - runContainerOnEC2
-          - 'EC2'
-          - 'FARGATE'
+        - 'EC2'
   OmeroserverTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -473,7 +541,6 @@ Resources:
         Value: omeroserver
   ECSAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
-    Condition: runContainerOnEC2
     DependsOn:
       - MountTarget
     Properties:
@@ -492,17 +559,13 @@ Resources:
         WillReplace: 'true'
   ContainerInstances:
     Type: AWS::AutoScaling::LaunchConfiguration
-    Condition: runContainerOnEC2
     Properties:
       ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMIID]
       SecurityGroups:
         - !Ref OmeroSecurityGroup
       InstanceType: !Ref 'InstanceType'
       IamInstanceProfile: !Ref 'EC2InstanceProfile'
-      KeyName: !If
-        - runContainerOnEC2
-        - !Ref 'KeyName'
-        - !Ref 'AWS::NoValue'
+      KeyName: !Ref 'KeyName'
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
@@ -519,9 +582,11 @@ Resources:
           source /etc/bashrc  
           conda install -c anaconda libstdcxx-ng -y 
           conda install -c anaconda libgcc-ng -y  
+          mkdir /S3FileGateway
+          mount -t nfs -o nolock,hard ${S3FileGatewayIp}:/${S3BucketName} /S3FileGateway 
+          echo "${S3FileGatewayIp}:/${S3BucketName} /S3FileGateway nfs defaults,_netdev,tls 0 0" >> /etc/fstab
   EC2Role:
     Type: AWS::IAM::Role
-    Condition: runContainerOnEC2
     Properties:
       AssumeRolePolicyDocument:
         Statement:
@@ -543,7 +608,6 @@ Resources:
         Value: omeroserver
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
-    Condition: runContainerOnEC2
     Properties:
       Path: /
       Roles: [!Ref 'EC2Role']
@@ -551,6 +615,7 @@ Resources:
   OmerowebService:
     Type: AWS::ECS::Service
     DependsOn:
+      - OMEROLoadBalancer
       - OmerowebHTTPSListener
       - OmerowebHTTPListener
     Properties:
@@ -741,3 +806,17 @@ Outputs:
       - ''
       - - 'https://'
         - !GetAtt OMEROLoadBalancer.DNSName
+  OMERONetworkLoadBalancerHTTPEnpoint4063:
+    Description: The HTTP endpoint of the OMERONetworkLoadBalancer
+    Value: !Join
+      - ''
+      - - 'http://'
+        - !GetAtt OMERONetworkLoadBalancer.DNSName
+        - ':4063'
+  OMERONetworkLoadBalancerHTTPEnpoint4064:
+    Description: The HTTP endpoint of the OMERONetworkLoadBalancer
+    Value: !Join
+      - ''
+      - - 'http://'
+        - !GetAtt OMERONetworkLoadBalancer.DNSName
+        - ':4064'

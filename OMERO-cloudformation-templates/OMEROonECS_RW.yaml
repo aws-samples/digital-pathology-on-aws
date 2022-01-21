@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
+  Namespace:
+    Description: A string of 4-20 lowercase letters and digits, starting with a letter. Included in resource names, allowing multiple deployments.
+    Default: monai
+    Type: String
+    AllowedPattern: "^[a-z]{1}[a-z0-9]{3,19}$"
+    ConstraintDescription: Between 4-20 letters and digits, starting with a letter
   VPCID:
     Description: ID of the VPC
     Type: AWS::EC2::VPC::Id
@@ -30,7 +36,7 @@ Parameters:
     Type: String
   LBAccessLogBucketName:
     Type: String
-    Default: ecs-loadbalancer-accesslog
+    Default: lb-accesslog
   RDSEndpointAddress:
     Type: String
     Description: The RDS database endpoinst address
@@ -166,7 +172,7 @@ Resources:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
       Description: Service Map for OMERO ECS deployment
-      Name: ecscloudmap.org
+      Name: !Sub ${AWS::StackName}.ecscloudmap.org
       Vpc: !Ref VPCID
   OmerowebServiceDiscoveryEntry:
     Type: AWS::ServiceDiscovery::Service
@@ -194,7 +200,7 @@ Resources:
   OMEROECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: OMEROECSCluster
+      ClusterName: !Sub ${AWS::StackName}-OMEROECSCluster
       ClusterSettings:
         - Name: containerInsights
           Value:  enabled
@@ -207,7 +213,6 @@ Resources:
       - LBAccessLogBucketPolicy
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: OMEROLoadBalancer
       LoadBalancerAttributes:
         - Key: load_balancing.cross_zone.enabled
           Value: "true"
@@ -228,16 +233,16 @@ Resources:
           Value: !Join
             - '-'
             - - !Ref LBAccessLogBucketName
+              - !Ref Namespace
               - !Ref AWS::AccountId
-              - !Ref AWS::Region
   LBAccessLogBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Join
             - '-'
             - - !Ref LBAccessLogBucketName
+              - !Ref Namespace
               - !Ref AWS::AccountId
-              - !Ref AWS::Region
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -275,7 +280,7 @@ Resources:
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /ecs/omero
+      LogGroupName: !Sub /ecs/omero/${AWS::StackName}
   
   MountTarget:
     Type: AWS::EFS::MountTarget

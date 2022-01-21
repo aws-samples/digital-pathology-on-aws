@@ -83,9 +83,13 @@ Create a [NFS file share](https://docs.aws.amazon.com/storagegateway/latest/user
 
 Then you will be able to deploy OMERO stack with NFS mount as storage backend through this 1-click deployment:
 
-[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonECS_RW._S3FG.yaml)
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonECS_RW_S3FG.yml)
 
 Two parameters were from the S3 file gateway deployment: S3FileGatewayIp and S3BucketName.
+
+Or if you want to deploy with a domain name and SSL certificate:
+
+[![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMERO2LBstackTLS_RW_StorageGateway.yml)
 
 
 #### Run Amazon ECS Exec Command to Import Images

@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
+  Namespace:
+    Description: A string of 4-20 lowercase letters and digits, starting with a letter. Included in resource names, allowing multiple deployments.
+    Default: monai
+    Type: String
+    AllowedPattern: "^[a-z]{1}[a-z0-9]{3,19}$"
+    ConstraintDescription: Between 4-20 letters and digits, starting with a letter
   VPCID:
     Description: ID of the VPC
     Type: AWS::EC2::VPC::Id
@@ -18,7 +24,7 @@ Parameters:
     Type: AWS::EC2::Subnet::Id
   LBAccessLogBucketName:
     Type: String
-    Default: ecs-loadbalancer-accesslog
+    Default: lb-accesslog
   NumberofWebInstances:
     Type: Number
     Default: 2
@@ -186,7 +192,7 @@ Resources:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
       Description: Service Map for OMERO ECS deployment
-      Name: ecscloudmap.org
+      Name: !Sub ${AWS::StackName}.omero-on-aws.local
       Vpc: !Ref VPCID
   OmerowebServiceDiscoveryEntry:
     Type: AWS::ServiceDiscovery::Service
@@ -214,7 +220,7 @@ Resources:
   RDSDatabaseSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: RDSDatabaseSecret
+      Name: !Sub ${AWS::StackName}-RDSDatabaseSecret
       Description: !Join ['', ['RDS Database Master User Secret ', 'for CloudFormation Stack ', !Ref 'AWS::StackName']]
       Tags:
         - Key: project
@@ -234,7 +240,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Load Balancer Security Group
-      GroupName: LBSecurityGroup
+      GroupName: !Sub ${AWS::StackName}-LBSecurityGroup
       SecurityGroupIngress:
         - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
           Description: omeroweb:4080/tcp
@@ -256,7 +262,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: OMERO Security Group
-      GroupName: OmeroSecurityGroup
+      GroupName: !Sub ${AWS::StackName}-OmeroSecurityGroup
       SecurityGroupIngress:
         - CidrIp: !Ref CIDRblock4OMEROSecurityGroup
           Description: omeroserver:4063/tcp
@@ -300,7 +306,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: RDS Security Group
-      GroupName: RDSSecurityGroup
+      GroupName: !Sub ${AWS::StackName}-RDSSecurityGroup
       SecurityGroupIngress:
         - SourceSecurityGroupId: !Ref OmeroSecurityGroup
           Description: postgres:5432/tcp
@@ -325,8 +331,7 @@ Resources:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Retain        ## or Delete/Snapshot
     Properties:
-      DBInstanceIdentifier: omero-instance
-      DBName: omero
+      DBInstanceIdentifier: !Sub ${AWS::StackName}-omero-instance
       DBInstanceClass: !Ref RDSDBInstanceClass
       StorageType: !Ref RDSDBStorageType
       StorageEncrypted: True
@@ -352,7 +357,7 @@ Resources:
   OMEROECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: OMEROECSCluster
+      ClusterName: !Sub ${AWS::StackName}-OMEROECSCluster
       ClusterSettings:
         - Name: containerInsights
           Value:  enabled
@@ -365,7 +370,6 @@ Resources:
       - LBAccessLogBucketPolicy
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: OMEROLoadBalancer
       LoadBalancerAttributes:
         - Key: load_balancing.cross_zone.enabled
           Value: "true"
@@ -386,16 +390,16 @@ Resources:
           Value: !Join
             - '-'
             - - !Ref LBAccessLogBucketName
+              - !Ref Namespace
               - !Ref AWS::AccountId
-              - !Ref AWS::Region
   LBAccessLogBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Join
             - '-'
             - - !Ref LBAccessLogBucketName
+              - !Ref Namespace
               - !Ref AWS::AccountId
-              - !Ref AWS::Region
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -433,7 +437,7 @@ Resources:
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /ecs/omero
+      LogGroupName: !Sub /ecs/omero/${AWS::StackName}
 
   OmeroserverService:
     Type: AWS::ECS::Service
