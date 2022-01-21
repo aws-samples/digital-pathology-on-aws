@@ -27,7 +27,6 @@ Metadata:
       - Label:
           default: 'ECS'
         Parameters:
-          - ECSContainerOnEC2
           - EC2KeyName
           - EC2InstanceType
           - NumberofECSEC2Instances
@@ -136,11 +135,6 @@ Parameters:
     Type: Number
     Default: 4096
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
-  ECSContainerOnEC2:
-    Type: String 
-    Default: N 
-    Description: will the ECS containers be hosted on ECS EC2 or Fargate launch type
-    AllowedValues: [Y, N]
   EC2KeyName:
     Type: String
     Description: Name of an existing EC2 KeyPair to enable SSH access to the ECS EC2 instance hosting OMERO Server. OPTIONAL only for EC2 launch type.
@@ -217,7 +211,6 @@ Resources:
         NumberofWebInstances: !Ref CountofWebInstances
         OMEROWebContainerCPU: !Ref OMEROWebContainerCPUSize
         OMEROWebContainerMemory: !Ref OMEROWebContainerMemorySize
-        ContainerOnEC2: !Ref ECSContainerOnEC2
         InstanceType: !Ref EC2InstanceType
         NumberofEC2Instances: !Ref NumberofECSEC2Instances
         OMEROServerContainerCPU: !Ref OMEROServerContainerCPUSize
