@@ -160,7 +160,7 @@ Parameters:
   OMEROServerContainerMemorySize:
     Description: The amount (in MiB) of memory to present to the container. . Memory should be at least two times of vCPU unit according to documentation.
     Type: Number
-    Default: 10240
+    Default: 8192
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
   ExistingRoute53HostedZoneId:
     Description: Existing HostedZone for Registered Domain used to validate SSL Certificate 

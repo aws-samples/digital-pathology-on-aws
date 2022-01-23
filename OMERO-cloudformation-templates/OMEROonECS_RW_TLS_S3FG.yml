@@ -1,5 +1,48 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Storage Gateway'
+        Parameters:
+          - S3FileGatewayIp
+          - S3BucketName
+      - Label:
+          default: 'RDS Database'
+        Parameters:
+          - RDSDBInstanceClass
+          - RDSDBStorageType
+          - RDSDBAllocatedStorage
+          - DBUser
+          - RDSDBBackupRetentionDays
+          - IsDBMultiAZ
+      - Label:
+          default: 'ECS'
+        Parameters:
+          - KeyName
+          - InstanceType
+          - NumberofEC2Instances
+          - LBAccessLogBucketName
+          - NumberofWebInstances
+          - OMEROWebContainerCPU
+          - OMEROWebContainerMemory
+          - OMEROServerContainerCPU
+          - OMEROServerContainerMemory
+          - OMEROServerContainerImage
+          - OMEROWebContainerImage
+      - Label:
+          default: 'Infrastructure'
+        Parameters:
+          - VPCID
+          - PublicSubnet1Id
+          - PublicSubnet2Id
+          - PrivateSubnet1Id
+          - PrivateSubnet2Id
+          - CIDRblock4OMEROSecurityGroup
+          - ExistingHostedZoneId
+          - FullDomainName
+
 Parameters:
   Namespace:
     Description: A string of 4-20 lowercase letters and digits, starting with a letter. Included in resource names, allowing multiple deployments.
@@ -44,7 +87,7 @@ Parameters:
   InstanceType:
     Description: EC2 instance type. OPTIONAL only for EC2 launch type.
     Type: String
-    Default: c5.xlarge
+    Default: m4.xlarge
     AllowedValues: [t2.large, m3.large,
       m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
       c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.8xlarge, r3.large, r3.xlarge, r3.2xlarge, r3.4xlarge,
@@ -62,7 +105,7 @@ Parameters:
   OMEROServerContainerMemory:
     Description: The amount (in MiB) of memory to present to the container. . Memory should be at least two times of vCPU unit according to documentation.
     Type: Number
-    Default: 4096
+    Default: 8192
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384]
   OMEROServerContainerImage:
     Type: String 
