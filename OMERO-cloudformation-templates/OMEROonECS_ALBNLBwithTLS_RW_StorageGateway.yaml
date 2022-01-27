@@ -91,6 +91,9 @@ Parameters:
   S3BucketName:
     Type: String 
     Description: The S3 bucket name for s3 file gateway
+  MountPoint:
+    Type: String 
+    Default: S3FileGateway
   DBUser:
     Type: String
     Default: omero
@@ -460,8 +463,7 @@ Resources:
       Volumes:
         - Name: my-fg
           Host: 
-            SourcePath: "/S3FileGateway"
-          
+            SourcePath: !Sub /${MountPoint}
       Cpu: !Ref OMEROServerContainerCPU
       Memory: !Ref OMEROServerContainerMemory
       ExecutionRoleArn: !Ref 'OmeroserverTaskExecutionRole'
@@ -470,6 +472,7 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - 'EC2'
+        
   OmeroserverTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -557,6 +560,21 @@ Resources:
         WillReplace: 'true'
   ContainerInstances:
     Type: AWS::AutoScaling::LaunchConfiguration
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          MountConfig:
+          - mount
+        mount:
+          commands:
+            01_newfolder:
+              command: !Sub "mkdir /${MountPoint}"
+            02_mount:
+              command: !Sub >
+                mount -t nfs -o nolock,hard ${S3FileGatewayIp}:/${S3BucketName} /${MountPoint} 
+            03_echo:
+              command: !Sub >
+                echo "${S3FileGatewayIp}:/${S3BucketName} /${MountPoint} nfs defaults,_netdev,tls 0 0" >> /etc/fstab
     Properties:
       ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMIID]
       SecurityGroups:
@@ -569,7 +587,8 @@ Resources:
           #!/bin/bash -xe
           echo ECS_CLUSTER=${OMEROECSCluster} >> /etc/ecs/ecs.config
           yum install -y aws-cfn-bootstrap bzip2 unzip
-          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ContainerInstances --configsets MountConfig --region ${AWS::Region}
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region} || echo "failed to notify stack"
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  
           unzip awscliv2.zip  
           ./aws/install
@@ -580,9 +599,6 @@ Resources:
           source /etc/bashrc  
           conda install -c anaconda libstdcxx-ng -y 
           conda install -c anaconda libgcc-ng -y  
-          mkdir /S3FileGateway
-          mount -t nfs -o nolock,hard ${S3FileGatewayIp}:/${S3BucketName} /S3FileGateway 
-          echo "${S3FileGatewayIp}:/${S3BucketName} /S3FileGateway nfs defaults,_netdev,tls 0 0" >> /etc/fstab
   EC2Role:
     Type: AWS::IAM::Role
     Properties:
@@ -726,7 +742,7 @@ Resources:
       ContainerDefinitions:
         - Environment:
             - Name: OMEROHOST
-              Value: omeroserver.ecscloudmap.org
+              Value: !Sub omeroserver.${AWS::StackName}.ecscloudmap.org
             - Name: LOCALDOMAIN
               Value: !Join
                 - ''

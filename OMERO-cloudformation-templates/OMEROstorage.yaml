@@ -220,6 +220,7 @@ Resources:
     DeletionPolicy: Retain        ## or Delete/Snapshot
     Properties:
       DBInstanceIdentifier: !Sub ${AWS::StackName}-omero-instance
+      DBName: omero
       DBInstanceClass: !Ref RDSDBInstanceClass
       StorageType: !Ref RDSDBStorageType
       StorageEncrypted: True

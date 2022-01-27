@@ -663,7 +663,7 @@ Resources:
       ContainerDefinitions:
         - Environment:
             - Name: OMEROHOST
-              Value: omeroserver.ecscloudmap.org
+              Value: !Sub omeroserver.${AWS::StackName}.ecscloudmap.org
             - Name: LOCALDOMAIN
               Value: !Join
                 - ''

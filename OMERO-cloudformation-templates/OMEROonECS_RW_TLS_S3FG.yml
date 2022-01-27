@@ -241,7 +241,7 @@ Resources:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
       Description: Service Map for OMERO ECS deployment
-      Name: !Sub ${AWS::StackName}.omero-on-aws.local
+      Name: !Sub ${AWS::StackName}.ecscloudmap.org
       Vpc: !Ref VPCID
   OmerowebServiceDiscoveryEntry:
     Type: AWS::ServiceDiscovery::Service
@@ -381,6 +381,7 @@ Resources:
     DeletionPolicy: Retain        ## or Delete/Snapshot
     Properties:
       DBInstanceIdentifier: !Sub ${AWS::StackName}-omero-instance
+      DBName: omero
       DBInstanceClass: !Ref RDSDBInstanceClass
       StorageType: !Ref RDSDBStorageType
       StorageEncrypted: True
@@ -805,7 +806,7 @@ Resources:
       ContainerDefinitions:
         - Environment:
             - Name: OMEROHOST
-              Value: omeroserver.ecscloudmap.org
+              Value: !Sub omeroserver.${AWS::StackName}.ecscloudmap.org
             - Name: LOCALDOMAIN
               Value: !Join
                 - ''

@@ -181,7 +181,7 @@ Resources:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
       Description: Service Map for Docker Compose project omero-on-aws
-      Name: !Sub ${AWS::StackName}.omero-on-aws.local
+      Name: omero-on-aws.local
       Vpc: !Ref VPCID
   OmeroserverreadonlyServiceDiscoveryEntry:
     Type: AWS::ServiceDiscovery::Service
