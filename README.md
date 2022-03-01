@@ -48,6 +48,7 @@ If you do not have registered domain and associated hosted zone in AWS Route53, 
 
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROstack_RW.yml)
 
+A cost estimate for the compute resources deployed by this solution can be found [here](https://calculator.aws/#/estimate?id=15abc33f2c524886f08547f2f48e66dee7112955).
 
 ### OMERO Data Ingestion 
 
