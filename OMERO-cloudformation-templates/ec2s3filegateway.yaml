@@ -15,6 +15,9 @@ Parameters:
     Type: AWS::EC2::Subnet::Id
   ParameterAZ:
     Type: String
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/storagegateway/ami/FILE_S3/latest'
   InstanceType:
     Description: EC2 instance type
     Type: String
@@ -39,41 +42,6 @@ Parameters:
     Type: String
     Description: The S3 bucket name for s3 file gateway
     
-Mappings:
-  AWSRegionToAMI:
-    us-east-1:
-      AMIID: ami-056f71af0f2ca2daa
-    us-east-2:
-      AMIID: ami-00be3bc0dc549205b
-    us-west-1:
-      AMIID: ami-026030a0f1dcadbd7
-    us-west-2:
-      AMIID: ami-02749deafe297682f
-    ca-central-1:
-      AMIID: ami-0963db74bdc2e5907
-    eu-central-1:
-      AMIID: ami-09d8ced296c32f4b8
-    eu-north-1:
-      AMIID: ami-024330984f12637fd
-    eu-west-1:
-      AMIID: ami-03f8cfbe95714b1c0
-    eu-west-2:
-      AMIID: ami-02a756b7be3a3ea12
-    eu-west-3:
-      AMIID: ami-06adcff6cf49a17a1
-    ap-northeast-1:
-      AMIID: ami-01f664d75518ebc7b
-    ap-northeast-2:
-      AMIID: ami-0889d8d66cff226d9
-    ap-south-1:
-      AMIID: ami-034c9289984ce22b7
-    ap-southeast-1:
-      AMIID: ami-04684f25b564ccd56
-    ap-southeast-2:
-      AMIID: ami-0d523c332d8a5f4b6
-    sa-east-1:
-      AMIID: ami-03c88482a4233f64f
-
 Resources:
   FileGatewayBucket:
     Type: AWS::S3::Bucket
@@ -120,7 +88,7 @@ Resources:
   EC2S3FileGateway:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMIID]
+      ImageId: !Ref LatestAmiId
       AvailabilityZone: !Ref ParameterAZ
       SecurityGroupIds: 
         - !Ref 'InstanceSecurityGroup'

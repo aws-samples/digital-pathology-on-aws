@@ -50,6 +50,9 @@ Parameters:
       c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.8xlarge, r3.large, r3.xlarge, r3.2xlarge, r3.4xlarge,
       r3.8xlarge, i2.xlarge, i2.2xlarge, i2.4xlarge, i2.8xlarge]
     ConstraintDescription: Please choose a valid instance type.
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id'
   NumberofEC2Instances:
     Description: Number of EC2 instance to run container in ECS cluster. OPTIONAL only for EC2 lanuch type.
     Type: Number
@@ -127,40 +130,6 @@ Parameters:
     Description: The number of days for which automated backups are retained. Setting this parameter to a positive number (from 1 to 35) enables backups. Setting this parameter to 0 disables automated backups. 
 
 Mappings:
-  AWSRegionToAMI:
-    us-east-1:
-      AMIID: ami-01783fbb0757adced
-    us-east-2:
-      AMIID: ami-0adc4758ea76442e2
-    us-west-1:
-      AMIID: ami-00becdb34b62bf459
-    us-west-2:
-      AMIID: ami-09f043c293281ecd4
-    ap-northeast-1:
-      AMIID: ami-04bbc04d168366d27
-    ap-northeast-2:
-      AMIID: ami-0273b23020d7a59de
-    ap-south-1:
-      AMIID: ami-000e4b3f0c9f06ffb
-    ap-southeast-1:
-      AMIID: ami-071fbc655b2398016
-    ap-southeast-2:
-      AMIID: ami-032edebfa34883542
-    ca-central-1:
-      AMIID: ami-092b596d9b942c4f8
-    eu-central-1:
-      AMIID: ami-097b8c9927f9a27bc
-    eu-north-1:
-      AMIID: ami-09666749b685f34d5
-    eu-west-1:
-      AMIID: ami-015b1508a2ff2c65a
-    eu-west-2:
-      AMIID: ami-0141564f07476504d
-    eu-west-3:
-      AMIID: ami-04cb3664fdfc392bd
-    sa-east-1:
-      AMIID: ami-003a04511c336560c
-
   RegionELBAccountIdMap:
     us-east-1:
       AccountId: '127311923021'
@@ -579,7 +548,6 @@ Resources:
     Properties:
       VPCZoneIdentifier:
         - !Ref PrivateSubnet1Id
-        - !Ref PrivateSubnet2Id
       LaunchConfigurationName: !Ref 'ContainerInstances'
       MinSize: '1'
       MaxSize: '4'
@@ -608,7 +576,7 @@ Resources:
               command: !Sub >
                 echo "${S3FileGatewayIp}:/${S3BucketName} /${MountPoint} nfs defaults,_netdev,tls 0 0" >> /etc/fstab
     Properties:
-      ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMIID]
+      ImageId: !Ref LatestAmiId
       SecurityGroups:
             - !Ref OmeroSecurityGroup
       InstanceType: !Ref 'InstanceType'
