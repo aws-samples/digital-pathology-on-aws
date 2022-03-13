@@ -77,14 +77,13 @@ Create File Gateway on EC2:
 
 <img src="Figures/filegateway.png" width="500">
 
-If you want to make all of the files uploaded to S3 visible as owned by "omero-server" within container mounted to the storage gateway, you can make the following change to the new file share created:
-
-<img src="Figures/fileshareowner.png" width="500">
-
 Connect to the EC2 file gateway instance through IP address and activate it. Follow [instruction](https://docs.aws.amazon.com/storagegateway/latest/userguide/create-gateway-file.html#GettingStartedBeginActivateGateway-file) to configure local disks and logging.
 
 Create a [NFS file share](https://docs.aws.amazon.com/storagegateway/latest/userguide/CreatingAnNFSFileShare.html) on top of the S3 bucket created earlier. If you want to upload files to S3 bucket separately and have them visible to the NFS share, you should configure the cache refresh:
 <img src="Figures/fileshare.png" width="300">
+
+If you want to make all of the files uploaded to S3 visible as owned by "omero-server" within container mounted to the storage gateway, you can make the following change to the new file share created:
+<img src="Figures/fileshareowner.png" width="500">
 
 Then you will be able to deploy OMERO stack with NFS mount as storage backend through this 1-click deployment:
 
