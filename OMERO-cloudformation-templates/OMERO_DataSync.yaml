@@ -32,10 +32,17 @@ Resources:
             - - !Ref S3BucketName
               - !Ref AWS::AccountId
               - !Ref AWS::Region
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
   SourceLocationS3BuckerRole:
     Type: AWS::IAM::Role
     Properties:

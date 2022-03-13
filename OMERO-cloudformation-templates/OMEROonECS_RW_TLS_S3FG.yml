@@ -419,10 +419,17 @@ Resources:
             - - !Ref LBAccessLogBucketName
               - !Ref Namespace
               - !Ref AWS::AccountId
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
   LBAccessLogBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties: 
