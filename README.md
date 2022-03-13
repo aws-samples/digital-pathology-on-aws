@@ -77,6 +77,10 @@ Create File Gateway on EC2:
 
 <img src="Figures/filegateway.png" width="500">
 
+If you want to make all of the files uploaded to S3 visible as owned by "omero-server" within container mounted to the storage gateway, you can make the following change to the new file share created:
+
+<img src="Figures/fileshareowner.png" width="500">
+
 Connect to the EC2 file gateway instance through IP address and activate it. Follow [instruction](https://docs.aws.amazon.com/storagegateway/latest/userguide/create-gateway-file.html#GettingStartedBeginActivateGateway-file) to configure local disks and logging.
 
 Create a [NFS file share](https://docs.aws.amazon.com/storagegateway/latest/userguide/CreatingAnNFSFileShare.html) on top of the S3 bucket created earlier. If you want to upload files to S3 bucket separately and have them visible to the NFS share, you should configure the cache refresh:
@@ -129,21 +133,20 @@ mkdir /OMERO/DropBox/root
 Then run the following commands to create the automated import job on OMERO server:
 ```bash
 export OMERODIR=/opt/omero/server/OMERO.server
-sudo su omero-server
-bin/omero config set omero.fs.watchDir "/OMERO/DropBox"
-bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"'
+$OMERODIR/bin/omero config set omero.fs.watchDir "/OMERO/DropBox"
+$OMERODIR/bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"'
 ```
 
 You can check if jobs are created successfully, by checking `/opt/omero/server/OMERO.server/var/log/DropBox.log` file, you should see something like: `Started OMERO.fs DropBox client`
 
 According to the [documentation](https://docs.openmicroscopy.org/omero/5.6.3/sysadmins/dropbox.html), you can add different arguments, like for in-place import: 
 ```bash
-bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"; --transfer=ln_s'
+$OMERODIR/bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"; --transfer=ln_s'
 ```
 
 or to check if a given path has already been imported beforehand (avoid duplicate import):
 ```bash
-bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"; --exclude=clientpath'
+$OMERODIR/bin/omero config set omero.fs.importArgs '-T "regex:^.*/(?<Container1>.*?)"; --exclude=clientpath'
 ```
 
 ### OMERO insight on AppStream
