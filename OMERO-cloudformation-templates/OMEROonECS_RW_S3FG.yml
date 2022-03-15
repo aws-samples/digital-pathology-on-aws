@@ -273,6 +273,23 @@ Resources:
       GroupId: !Ref OmeroSecurityGroup
       IpProtocol: '-1'
       SourceSecurityGroupId: !Ref OmeroSecurityGroup
+  EFSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EFS Security Group
+      GroupName: !Sub ${AWS::StackName}-EFSSecurityGroup
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !Ref OmeroSecurityGroup
+          Description: efs:4063/tcp
+          FromPort: 2049
+          IpProtocol: TCP
+          ToPort: 2049
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: network
+          Value: efs
+      VpcId: !Ref VPCID
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -418,6 +435,34 @@ Resources:
     Properties:
       LogGroupName: !Sub /ecs/omero/${AWS::StackName}
 
+  EFSFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: True
+      BackupPolicy: 
+        Status: ENABLED
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_90_DAYS
+      FileSystemTags:
+        - Key: Name
+          Value: OMEROEFSvolume
+  MountTarget:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SubnetId: !Ref PrivateSubnet1Id
+      SecurityGroups:
+        - !Ref EFSSecurityGroup
+  NFSAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties: 
+      FileSystemId: !Ref EFSFileSystem
+      PosixUser:
+        Gid: "0"
+        Uid: "0"
+      RootDirectory:
+        Path: "/"
+
   OmeroserverService:
     Type: AWS::ECS::Service
     DependsOn:
@@ -482,8 +527,10 @@ Resources:
               awslogs-stream-prefix: omeroserver
           Name: omeroserver
           MountPoints:
-            - ContainerPath: /OMERO
+            - ContainerPath: /s3uploads
               SourceVolume: my-fg
+            - ContainerPath: /OMERO
+              SourceVolume: my-efs
           PortMappings:
             - ContainerPort: 4063
               HostPort: 4063
@@ -495,6 +542,13 @@ Resources:
         - Name: my-fg
           Host: 
             SourcePath: !Sub /${MountPoint}
+        - name: my-efs
+          EFSVolumeConfiguration: 
+            FilesystemId: !Ref EFSFileSystem
+            TransitEncryption: ENABLED
+            AuthorizationConfig: 
+              AccessPointId: !Ref NFSAccessPoint
+              IAM: ENABLED
       Cpu: !Ref OMEROServerContainerCPU
       Memory: !Ref OMEROServerContainerMemory
       ExecutionRoleArn: !Ref 'OmeroserverTaskExecutionRole'
@@ -535,6 +589,26 @@ Resources:
               Service: ecs-tasks.amazonaws.com
         Version: '2012-10-17'
       Policies:
+        - PolicyName: OmeroserverOmeroVolumeMountPolicy
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - elasticfilesystem:ClientMount
+                  - elasticfilesystem:ClientWrite
+                  - elasticfilesystem:ClientRootAccess
+                Condition:
+                  StringEquals:
+                    elasticfilesystem:AccessPointArn: !Ref NFSAccessPoint
+                Effect: Allow
+                Resource:
+                  - !Join
+                    - ''
+                    - - 'arn:aws:elasticfilesystem:'
+                      - !Ref 'AWS::Region'
+                      - ':'
+                      - !Ref 'AWS::AccountId'
+                      - ':file-system/'
+                      - !Ref EFSFileSystem
         - PolicyName: OmeroserverSSMPolicy
           PolicyDocument:
             Statement:
