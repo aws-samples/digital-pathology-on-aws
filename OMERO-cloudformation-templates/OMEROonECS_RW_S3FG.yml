@@ -757,8 +757,6 @@ Resources:
       Protocol: HTTP
   OmerowebTCP4080TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    DependsOn:
-      - OMEROLoadBalancer
     Properties:
       Port: 4080
       Protocol: HTTP
