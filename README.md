@@ -69,6 +69,8 @@ You can create a DataSync task to monitor a S3 bucket and copy the files over to
 
 If you have huge amount of data and I/O performance is not critical, you can save the image files on Amazon S3 and deploy a S3 filegateway on Amazon EC2 to cache a subset of files, and mount a NFS file share instead of Amazon EFS volume to OMERO server. Although Amazon S3 cost significantly less than Amazon EFS, the file gateway instance does have the extra cost. We have done a storage cost comparison for 2TB of data between [Amazon EFS with intelligent tiering](https://calculator.aws/#/estimate?id=bbaac0d5d38a5c2d457848cae5745cdbbfeddb92) and [Amazon S3 with filegateway on EC2](https://calculator.aws/#/estimate?id=688458e015f93858a005995d91597775bf67731f).
 
+<img src="Figures/storagegateway.jpg" width="500">
+
 You can follow the [instruction to deploy an Amazon S3 File gateway on EC2](https://docs.aws.amazon.com/storagegateway/latest/userguide/ec2-gateway-file.html) to cache the images in S3 bucket to reduce storage cost. Alternatively, you can create the EC2 file gateway instance and S3 bucket using 1-click deployment:
 
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=s3filegatewayinstance&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/ec2s3filegateway.yaml)
