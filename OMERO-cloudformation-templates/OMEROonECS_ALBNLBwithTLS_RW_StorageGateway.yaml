@@ -249,6 +249,8 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
   LBAccessLogBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties: 

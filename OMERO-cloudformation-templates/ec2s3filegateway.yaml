@@ -55,7 +55,9 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
-
+      VersioningConfiguration:
+        Status: Enabled
+        
   InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
