@@ -70,11 +70,6 @@ Resources:
           IpProtocol: TCP
           ToPort: 80
         - CidrIp: '0.0.0.0/0'
-          Description: ssh:22/tcp
-          FromPort: 22
-          IpProtocol: TCP
-          ToPort: 22
-        - CidrIp: '0.0.0.0/0'
           Description: efs:2049/tcp
           FromPort: 2049
           IpProtocol: TCP

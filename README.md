@@ -87,6 +87,9 @@ Create a [NFS file share](https://docs.aws.amazon.com/storagegateway/latest/user
 If you want to make all of the files uploaded to S3 visible as owned by "omero-server" within container mounted to the storage gateway, you can make the following change to the new file share created:
 <img src="Figures/fileshareowner.png" width="500">
 
+After storage gateway setup, you can revoke the storage gateway EC2 instance security group ingress rule for port 80, which is only used for storage gateway activation. 
+<img src="Figures/securitygroup.png" width="300">
+
 Then you will be able to deploy OMERO stack with NFS mount as storage backend through this 1-click deployment:
 
 [![launchstackbutton](Figures/launchstack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template?stackName=omerostack&templateURL=https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonECS_RW_S3FG.yml)
