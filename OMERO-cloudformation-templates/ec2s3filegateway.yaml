@@ -21,7 +21,7 @@ Parameters:
   InstanceType:
     Description: EC2 instance type
     Type: String
-    Default: m4.xlarge
+    Default: m5.xlarge
     AllowedValues: [
       c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, 
       c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge, c5.12xlarge, c5.18xlarge, 
@@ -35,9 +35,6 @@ Parameters:
     Type: Number
     Default: 150
     Description: The Amazon EBS volume size attached to the File Gateway as cache, in GiBs. 
-  KeyName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: Name of an existing EC2 KeyPair to enable SSH access to the EC2 instances. OPTIONAL only for EC2 launch type.
   FileGatewayBucketName:
     Type: String
     Description: The S3 bucket name for s3 file gateway
@@ -90,7 +87,6 @@ Resources:
       SecurityGroupIds: 
         - !Ref 'InstanceSecurityGroup'
       SubnetId: !Ref ParameterSubnetId
-      KeyName: !Ref 'KeyName'
       InstanceType: !Ref 'InstanceType'
       BlockDeviceMappings: 
         - DeviceName: /dev/sdb
