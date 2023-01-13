@@ -60,9 +60,15 @@ Parameters:
   LBPublicSubnet1Id:
     Description: SubnetId, for Availability Zone 1 in the region in your VPC. The only one OMERO Server instance is deployed in this subnet.
     Type: AWS::EC2::Subnet::Id
+  LBPublicSubnetAZ1Name:
+    Description: Availability Zone Name for Public Subnet 1.
+    Type: String
   LBPublicSubnet2Id:
     Description: SubnetId, for Availability Zone 2 in the region in your VPC. None of OMERO Server instance is deployed in this subnet.
     Type: AWS::EC2::Subnet::Id
+  LBPublicSubnetAZ2Name:
+    Description: Availability Zone Name for Public Subnet 2.
+    Type: String
   CIDROMEROSecurityGroup:
     Type: String
     Default: '0.0.0.0/0'
@@ -162,6 +168,9 @@ Parameters:
     Default: 10240
     AllowedValues: [512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360, 16384, 30720]
 
+Conditions:
+  runContainerOnEC2: !Equals [ !Ref 'ECSContainerOnEC2', 'Y' ]
+
 Resources:
   StorageStack:
     Type: 'AWS::CloudFormation::Stack'
@@ -230,6 +239,36 @@ Resources:
           Fn::GetAtt: 
           - StorageStack
           - Outputs.RDSDatabaseSecret
+  MonitoringStack:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: https://nand-content.s3.amazonaws.com/omero/OMEROonECS_Monitoring.yaml
+      Parameters:
+        DashboardName: !Join ['-', [!Ref 'AWS::StackName', !Ref StackNamespace ]]
+        ApplicationELBNameSpace: 
+          Fn::GetAtt: 
+          - ECScontainerStack
+          - Outputs.ApplicationELBNameSpace
+        ApplicationELBAZ1Name: !Ref LBPublicSubnetAZ1Name
+        ApplicationELBAZ2Name: !Ref LBPublicSubnetAZ2Name
+        ApplicationELBTargetGroupNameSpace:
+          Fn::GetAtt: 
+          - ECScontainerStack
+          - Outputs.ApplicationELBTargetGroupNameSpace
+        EC2AutoScalingGroupName:
+          Fn::If:
+            - runContainerOnEC2
+            - Fn::GetAtt: ECScontainerStack.Outputs.EC2AutoScalingGroupName
+            - !Ref StackNamespace
+        RDSDBInstanceIdentifier:
+          Fn::GetAtt: 
+          - StorageStack
+          - Outputs.RDSDBInstanceIdentifier
+        ECSClusterName:
+          Fn::GetAtt: 
+          - ECScontainerStack
+          - Outputs.ECSClusterName
+        ContainerOnEC2: !Ref ECSContainerOnEC2
 
 Outputs:
   OMEROLoadBalancerHTTPEnpoint:
