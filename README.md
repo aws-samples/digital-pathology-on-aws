@@ -301,7 +301,7 @@ CFN template automates the deployment of the CloudWatch log configuration for om
     <img src="Figures/omero-server-blitz-log.png" width="500">
 
 ----
-## OMERO Application Dashboard Monitoring in CloudWatch 
+## OMERO Application Monitoring Dashboard in CloudWatch
 Omero Application Dashboard is deployed as part of the application deployment. The monitoring dashboard will vary depending on the ECS deployment that is chosen. If you do choose the deploy the Omero Server Container on ECS/EC2 the dashboard will include EC2 metrics in addition to the ALB, Database, ECS Cluster and Container Insights metrics. If you do want to extend the metrics captured in the dashboard please review the `OMEROonECS_Monitoring.yaml` templates for additional customization including any alarm configurations.
 
 Sample OMERO Application Dashboard available on CloudWatch.

@@ -242,7 +242,7 @@ Resources:
   MonitoringStack:
     Type: 'AWS::CloudFormation::Stack'
     Properties:
-      TemplateURL: https://nand-content.s3.amazonaws.com/omero/OMEROonECS_Monitoring.yaml
+      TemplateURL: https://omero-on-aws.s3-us-west-1.amazonaws.com/OMEROonECS_Monitoring.yaml
       Parameters:
         DashboardName: !Join ['-', [!Ref 'AWS::StackName', !Ref StackNamespace ]]
         ApplicationELBNameSpace: 
