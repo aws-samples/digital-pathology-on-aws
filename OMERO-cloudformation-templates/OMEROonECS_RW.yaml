@@ -106,6 +106,7 @@ Parameters:
 
 Conditions:
   runContainerOnEC2: !Equals [ !Ref 'ContainerOnEC2', 'Y' ]
+  runContainerOnFargate: !Not [ Condition: runContainerOnEC2]
 
 Mappings:
   RegionELBAccountIdMap:
@@ -185,6 +186,14 @@ Resources:
       LoadBalancerAttributes:
         - Key: load_balancing.cross_zone.enabled
           Value: "true"
+        - Key: access_logs.s3.enabled
+          Value: "true"
+        - Key: access_logs.s3.bucket
+          Value: !Join
+            - '-'
+            - - !Ref LBAccessLogBucketName
+              - !Ref Namespace
+              - !Ref AWS::AccountId
       Scheme: internet-facing
       Subnets:
         - !Ref 'PublicSubnet1Id'
@@ -195,15 +204,6 @@ Resources:
         - Key: project
           Value: omero-on-aws
       Type: application
-      LoadBalancerAttributes:
-        - Key: access_logs.s3.enabled
-          Value: true
-        - Key: access_logs.s3.bucket
-          Value: !Join
-            - '-'
-            - - !Ref LBAccessLogBucketName
-              - !Ref Namespace
-              - !Ref AWS::AccountId
   LBAccessLogBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -270,10 +270,11 @@ Resources:
       RootDirectory:
         Path: "/"
 
-  OmeroserverService:
+  OmeroserverEC2Service:
     Type: AWS::ECS::Service
+    Condition: runContainerOnEC2
     DependsOn:
-      - OmeroserverTaskDefinition
+      - OmeroserverEC2TaskDefinition
     Properties:
       Cluster: !Ref 'OMEROECSCluster'
       DeploymentConfiguration:
@@ -282,10 +283,7 @@ Resources:
       DeploymentController:
         Type: ECS
       DesiredCount: 1
-      LaunchType: !If
-        - runContainerOnEC2
-        - 'EC2'
-        - 'FARGATE'
+      LaunchType: 'EC2'
       EnableExecuteCommand: true
       NetworkConfiguration:
         AwsvpcConfiguration:
@@ -303,10 +301,11 @@ Resources:
           Value: omero-on-aws
         - Key: service
           Value: omeroserver
-      TaskDefinition: !Ref 'OmeroserverTaskDefinition'
+      TaskDefinition: !Ref 'OmeroserverEC2TaskDefinition'
   
-  OmeroserverTaskDefinition:
+  OmeroserverEC2TaskDefinition:
     Type: AWS::ECS::TaskDefinition
+    Condition: runContainerOnEC2
     Properties:
       ContainerDefinitions:
         - Environment:
@@ -328,7 +327,104 @@ Resources:
               Value: omero
           Essential: true
           Image: !Ref OMEROServerContainerImage
-          LinuxParameters: { initProcessEnabled: true }
+          LinuxParameters: { "InitProcessEnabled": true }
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref 'LogGroup'
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: omeroserver
+          Name: omeroserver
+          MountPoints:
+            - ContainerPath: /OMERO
+              SourceVolume: my-efs
+            - ContainerPath: /opt/omero/server/OMERO.server/var/log
+              SourceVolume: omero-logs
+          PortMappings:
+            - ContainerPort: 4063
+              HostPort: 4063
+              Protocol: tcp
+            - ContainerPort: 4064
+              HostPort: 4064
+              Protocol: tcp
+      Volumes:
+        - Name: my-efs
+          EFSVolumeConfiguration: 
+            FilesystemId: !Ref EFSFileSystem
+            TransitEncryption: ENABLED
+            AuthorizationConfig: 
+              AccessPointId: !Ref NFSAccessPoint
+              IAM: ENABLED
+        - Name: omero-logs
+          Host:
+            SourcePath: "/var/log/omero"
+      Cpu: !Ref OMEROServerContainerCPU
+      Memory: !Ref OMEROServerContainerMemory
+      ExecutionRoleArn: !Ref 'OmeroserverTaskExecutionRole'
+      TaskRoleArn: !Ref 'OmeroserverTaskRole'
+      Family: omero-server
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - 'EC2'
+
+  OmeroserverFargateService:
+    Type: AWS::ECS::Service
+    Condition: runContainerOnFargate
+    DependsOn:
+      - OmeroserverFargateTaskDefinition
+    Properties:
+      Cluster: !Ref 'OMEROECSCluster'
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: ECS
+      DesiredCount: 1
+      LaunchType: 'FARGATE'
+      EnableExecuteCommand: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref OmeroSecurityGroup
+          Subnets:
+            - !Ref 'PrivateSubnet1Id'
+      PropagateTags: SERVICE
+      SchedulingStrategy: REPLICA
+      ServiceRegistries:
+        - RegistryArn: !GetAtt 'OmeroserverServiceDiscoveryEntry.Arn'
+      Tags:
+        - Key: project
+          Value: omero-on-aws
+        - Key: service
+          Value: omeroserver
+      TaskDefinition: !Ref 'OmeroserverFargateTaskDefinition'
+  
+  OmeroserverFargateTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Condition: runContainerOnFargate
+    Properties:
+      ContainerDefinitions:
+        - Environment:
+            - Name: CONFIG_omero_db_host
+              Value: !Ref RDSEndpointAddress
+            - Name: CONFIG_omero_db_user
+              Value: !Ref DBUser
+            - Name: CONFIG_omero_db_pass
+              Value: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSDatabaseSecret, ':SecretString:password}}' ]]
+            - Name: CONFIG_omero_db_name
+              Value: omero
+            - Name: LOCALDOMAIN
+              Value: !Join
+                - ''
+                - - !Ref 'AWS::Region'
+                  - .compute.internal
+                  - 'omero.local'
+            - Name: ROOTPASS
+              Value: omero
+          Essential: true
+          Image: !Ref OMEROServerContainerImage
+          LinuxParameters: { "InitProcessEnabled": true }
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -347,7 +443,7 @@ Resources:
               HostPort: 4064
               Protocol: tcp
       Volumes:
-        - name: my-efs
+        - Name: my-efs
           EFSVolumeConfiguration: 
             FilesystemId: !Ref EFSFileSystem
             TransitEncryption: ENABLED
@@ -361,10 +457,8 @@ Resources:
       Family: omero-server
       NetworkMode: awsvpc
       RequiresCompatibilities:
-        - !If
-          - runContainerOnEC2
-          - 'EC2'
-          - 'FARGATE'
+        - 'FARGATE'
+
   OmeroserverTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -384,6 +478,7 @@ Resources:
         Value: omero-on-aws
       - Key: service
         Value: omeroserver
+
   OmeroserverTaskRole:
     Type: AWS::IAM::Role
     Properties:
@@ -431,6 +526,41 @@ Resources:
         Value: omero-on-aws
       - Key: service
         Value: omeroserver
+  OmeroServerLogConfiguration:
+    Type: AWS::SSM::Parameter
+    Condition: runContainerOnEC2
+    Properties: 
+      DataType: text
+      Description: WebServers CloudWatch Agent Configuration
+      Name: /omero/server/logagent/config
+      Type: String
+      Tier: Standard
+      Value: |
+        {
+          "agent": {
+            "run_as_user": "root"
+          },
+          "logs": {
+            "logs_collected": {
+              "files": {
+                "collect_list": [
+                  {
+                    "file_path": "/var/log/omero/Blitz-0.log",
+                    "log_group_name": "/ecs/omero/server/Blitz-0.log",
+                    "log_stream_name": "{instance_id}",
+                    "retention_in_days": 30
+                  },
+                  {
+                    "file_path": "/var/log/omero/DropBox.log",
+                    "log_group_name": "/ecs/omero/server/DropBox.log",
+                    "log_stream_name": "{instance_id}",
+                    "retention_in_days": 30
+                  }
+                ]
+              }
+            }
+          }
+        }
   ECSAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Condition: runContainerOnEC2
@@ -463,7 +593,7 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
           echo ECS_CLUSTER=${OMEROECSCluster} >> /etc/ecs/ecs.config
-          yum install -y aws-cfn-bootstrap bzip2 unzip
+          yum install -y aws-cfn-bootstrap bzip2 unzip telnet netstat amazon-cloudwatch-agent
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  
           unzip awscliv2.zip  
@@ -474,7 +604,10 @@ Resources:
           echo -e '\n# Anaconda Adam\nexport PATH=/opt/adam/bin:$PATH' >> /etc/bashrc 
           source /etc/bashrc  
           conda install -c anaconda libstdcxx-ng -y 
-          conda install -c anaconda libgcc-ng -y   
+          conda install -c anaconda libgcc-ng -y 
+          cd /var/log && mkdir omero
+          cd /var/log && chmod -R 777 omero
+          sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:${OmeroServerLogConfiguration}
   EC2Role:
     Type: AWS::IAM::Role
     Condition: runContainerOnEC2
@@ -492,6 +625,8 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
       Tags:
       - Key: project
         Value: omero-on-aws
@@ -590,7 +725,7 @@ Resources:
                   - 'omero.local'
           Essential: true
           Image: !Ref OMEROWebContainerImage
-          LinuxParameters: { initProcessEnabled: true }
+          LinuxParameters: { "InitProcessEnabled": true }
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -659,3 +794,24 @@ Outputs:
       - ''
       - - 'http://'
         - !GetAtt OMEROLoadBalancer.DNSName
+  ApplicationELBNameSpace:
+    Description: Application Load Balancer Resource
+    Value: !Join
+      - '/'
+      - - !Select [1, !Split ["/", !Ref OMEROLoadBalancer]]
+        - !Select [2, !Split ["/", !Ref OMEROLoadBalancer]]
+        - !Select [3, !Split ["/", !Ref OMEROLoadBalancer]]
+  ApplicationELBTargetGroupNameSpace:
+    Description: Load Balancer Target Group
+    Value: !Join
+      - '/'
+      - - "targetgroup"
+        - !Select [1, !Split ["/", !Ref 'OmerowebTCP4080TargetGroup']]
+        - !Select [2, !Split ["/", !Ref 'OmerowebTCP4080TargetGroup']]
+  EC2AutoScalingGroupName:
+    Description: EC2 Auto Scaling Group Name
+    Condition: runContainerOnEC2
+    Value: !Ref ECSAutoScalingGroup
+  ECSClusterName:
+    Description: ECSClusterName
+    Value: !Ref OMEROECSCluster
