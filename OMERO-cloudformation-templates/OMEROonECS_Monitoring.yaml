@@ -1,0 +1,810 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  DashboardName:
+    Description: "The CloudWatch dashboard name for Omero Application."
+    Type: "String"
+    Default: "omero-dev-dashboard"
+  ApplicationELBNameSpace:
+    Description: "Omero Application ELB Name Space"
+    Type: "String"
+  ApplicationELBAZ1Name:
+    Description: "Omero Application ELB Public Availaibility Zone 1 Name"
+    Type: "String"
+  ApplicationELBAZ2Name:
+    Description: "Omero Application ELB Public Availaibility Zone 2 Name"
+    Type: "String"
+  ApplicationELBTargetGroupNameSpace:
+    Description: "Omero ApplicationELBTargetGroup Name Space"
+    Type: "String"
+  EC2AutoScalingGroupName:
+    Description: "Omero EC2 AutoScalingGroupName"
+    Type: "String"
+  RDSDBInstanceIdentifier:
+    Description: "Omero RDS Database InstanceIdentifier"
+    Type: "String"
+  ECSClusterName:
+    Description: "Omero ECSCluster Name"
+    Type: "String"
+  ContainerOnEC2:
+    Type: String 
+    Default: N 
+    Description: will the containers be hosted on ECS EC2 or Fargate launch type
+    AllowedValues: [Y, N]
+
+Conditions:
+  runContainerOnEC2: !Equals [ !Ref 'ContainerOnEC2', 'Y' ]
+  runContainerOnFargate: !Not [ Condition: runContainerOnEC2]
+
+Resources:
+  EC2Dashboard:
+    Type: "AWS::CloudWatch::Dashboard"
+    Condition: runContainerOnEC2
+    Properties:
+      DashboardName: !Join ['-', [!Ref DashboardName, "EC2" ]]
+      DashboardBody: !Sub 
+          '{
+              "widgets": [
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 0,
+                      "x": 0,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/ApplicationELB", "RequestCount", "TargetGroup", "${ApplicationELBTargetGroupNameSpace}", "LoadBalancer", "${ApplicationELBNameSpace}", "AvailabilityZone", "${ApplicationELBAZ2Name}" ],
+                              [ "...", "${ApplicationELBAZ1Name}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "ALB-Request-Count-By-AZ"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 0,
+                      "x": 6,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": true,
+                          "metrics": [
+                              [ "AWS/ApplicationELB", "HTTPCode_Target_2XX_Count", "TargetGroup", "${ApplicationELBTargetGroupNameSpace}", "LoadBalancer", "${ApplicationELBNameSpace}", "AvailabilityZone", "${ApplicationELBAZ2Name}" ],
+                              [ ".", "HTTPCode_Target_4XX_Count", ".", ".", ".", ".", ".", "." ],
+                              [ "...", "${ApplicationELBAZ1Name}" ],
+                              [ ".", "HTTPCode_Target_3XX_Count", ".", ".", ".", ".", ".", "${ApplicationELBAZ2Name}" ],
+                              [ "...", "${ApplicationELBAZ1Name}" ],
+                              [ ".", "HTTPCode_Target_2XX_Count", ".", ".", ".", ".", ".", "." ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "setPeriodToTimeRange": true,
+                          "title": "ALB-ResponseCode-By-AZ"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 0,
+                      "x": 12,
+                      "type": "metric",
+                      "properties": {
+                          "view": "pie",
+                          "stacked": true,
+                          "metrics": [
+                              [ "AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", "${ApplicationELBTargetGroupNameSpace}", "LoadBalancer", "${ApplicationELBNameSpace}", "AvailabilityZone", "${ApplicationELBAZ2Name}" ],
+                              [ ".", "UnHealthyHostCount", ".", ".", ".", ".", ".", "${ApplicationELBAZ1Name}" ],
+                              [ ".", "HealthyHostCount", ".", ".", ".", ".", ".", "." ],
+                              [ ".", "UnHealthyHostCount", ".", ".", ".", ".", ".", "${ApplicationELBAZ2Name}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "setPeriodToTimeRange": true,
+                          "period": 300,
+                          "title": "ALB-HealthyUnhealthy-Host "
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 0,
+                      "x": 18,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "AWS/ApplicationELB", "RequestCountPerTarget", "TargetGroup", "${ApplicationELBTargetGroupNameSpace}", { "visible": false } ],
+                              [ ".", "TargetResponseTime", ".", ".", "LoadBalancer", "${ApplicationELBNameSpace}", "AvailabilityZone", "${ApplicationELBAZ2Name}" ],
+                              [ "...", "${ApplicationELBAZ1Name}" ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "ALB Response Time",
+                          "period": 300,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 6,
+                      "x": 0,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${EC2AutoScalingGroupName}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "EC2-CPU-Utilization"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 6,
+                      "x": 6,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/EC2", "NetworkPacketsOut", "AutoScalingGroupName", "${EC2AutoScalingGroupName}" ],
+                              [ ".", "NetworkPacketsIn", ".", "." ],
+                              [ ".", "NetworkOut", ".", "." ],
+                              [ ".", "NetworkIn", ".", "." ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "EC2-Network-Stats",
+                          "period": 300
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 6,
+                      "x": 12,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/EC2", "DiskWriteOps", "AutoScalingGroupName", "${EC2AutoScalingGroupName}" ],
+                              [ ".", "DiskReadBytes", ".", "." ],
+                              [ ".", "DiskReadOps", ".", "." ],
+                              [ ".", "DiskWriteBytes", ".", "." ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "EC2-Disk-Stats"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 6,
+                      "x": 18,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/EC2", "StatusCheckFailed_System", "AutoScalingGroupName", "${EC2AutoScalingGroupName}" ],
+                              [ ".", "StatusCheckFailed", ".", "." ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "EC2-Health-Stats"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 12,
+                      "x": 0,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", "${RDSDBInstanceIdentifier}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "DB-CPU-Utilization"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 12,
+                      "x": 6,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", "${RDSDBInstanceIdentifier}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "DB-Connection-Stats"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 12,
+                      "x": 12,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/RDS", "FreeStorageSpace", "DBInstanceIdentifier", "${RDSDBInstanceIdentifier}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "DB-FreeStorageSpace"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 12,
+                      "x": 18,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/RDS", "FreeableMemory", "DBInstanceIdentifier", "${RDSDBInstanceIdentifier}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "period": 300,
+                          "title": "DB-Freeable-Memory"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 18,
+                      "x": 0,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "CpuReserved", "TaskDefinitionFamily", "omero-server", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "CpuUtilized", ".", ".", ".", "." ],
+                              [ ".", "MemoryReserved", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "StorageWriteBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryUtilized", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "StorageReadBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkRxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkTxBytes", ".", ".", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Omero-Server-Task-CPU-Utilization",
+                          "period": 300,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 18,
+                      "x": 12,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "CpuUtilized", "TaskDefinitionFamily", "omero-web", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "StorageWriteBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkRxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "CpuReserved", ".", ".", ".", "." ],
+                              [ ".", "EphemeralStorageReserved", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkTxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryReserved", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryUtilized", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "StorageReadBytes", ".", ".", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Omero-Web-Task-CPU",
+                          "period": 300,
+                          "setPeriodToTimeRange": true,
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "liveData": false,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 18,
+                      "x": 6,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "CpuReserved", "TaskDefinitionFamily", "omero-server", "ClusterName", "${ECSClusterName}", { "visible": false } ],
+                              [ ".", "CpuUtilized", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryReserved", ".", ".", ".", "." ],
+                              [ ".", "StorageWriteBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryUtilized", ".", ".", ".", "." ],
+                              [ ".", "StorageReadBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkRxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkTxBytes", ".", ".", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Omero-Server-Task-Memory",
+                          "period": 300,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 18,
+                      "x": 18,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "CpuUtilized", "TaskDefinitionFamily", "omero-web", "ClusterName", "${ECSClusterName}", { "visible": false } ],
+                              [ ".", "StorageWriteBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkRxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "CpuReserved", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "EphemeralStorageReserved", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkTxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryReserved", ".", ".", ".", "." ],
+                              [ ".", "MemoryUtilized", ".", ".", ".", "." ],
+                              [ ".", "StorageReadBytes", ".", ".", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Omero-Web-Task-Memory",
+                          "period": 300,
+                          "setPeriodToTimeRange": true,
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "liveData": false,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 5,
+                      "width": 6,
+                      "y": 24,
+                      "x": 18,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "CpuUtilized", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "CpuReserved", ".", "." ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Cluster-CPU"
+                      }
+                  },
+                  {
+                      "height": 5,
+                      "width": 6,
+                      "y": 24,
+                      "x": 12,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "MemoryReserved", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "MemoryUtilized", ".", "." ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Cluster-Memory",
+                          "period": 300,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 5,
+                      "width": 6,
+                      "y": 24,
+                      "x": 0,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "ServiceCount", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "TaskCount", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "pie",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Cluster-Services",
+                          "period": 300,
+                          "stat": "Average",
+                          "setPeriodToTimeRange": true
+                      }
+                  },
+                  {
+                      "height": 5,
+                      "width": 6,
+                      "y": 24,
+                      "x": 6,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "ServiceCount", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "TaskCount", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Cluster-Tasks",
+                          "period": 300,
+                          "stat": "Average",
+                          "setPeriodToTimeRange": true
+                      }
+                  }
+              ]
+          }'
+
+  FargateDashboard:
+    Type: "AWS::CloudWatch::Dashboard"
+    Condition: runContainerOnFargate
+    Properties:
+      DashboardName: !Join ['-', [!Ref DashboardName, "Fargate" ]]
+      DashboardBody: !Sub 
+          '{
+              "widgets": [
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 0,
+                      "x": 0,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/ApplicationELB", "RequestCount", "TargetGroup", "${ApplicationELBTargetGroupNameSpace}", "LoadBalancer", "${ApplicationELBNameSpace}", "AvailabilityZone", "${ApplicationELBAZ2Name}" ],
+                              [ "...", "${ApplicationELBAZ1Name}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "ALB-Request-Count-By-AZ"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 0,
+                      "x": 6,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": true,
+                          "metrics": [
+                              [ "AWS/ApplicationELB", "HTTPCode_Target_2XX_Count", "TargetGroup", "${ApplicationELBTargetGroupNameSpace}", "LoadBalancer", "${ApplicationELBNameSpace}", "AvailabilityZone", "${ApplicationELBAZ2Name}" ],
+                              [ ".", "HTTPCode_Target_4XX_Count", ".", ".", ".", ".", ".", "." ],
+                              [ "...", "${ApplicationELBAZ1Name}" ],
+                              [ ".", "HTTPCode_Target_3XX_Count", ".", ".", ".", ".", ".", "${ApplicationELBAZ2Name}" ],
+                              [ "...", "${ApplicationELBAZ1Name}" ],
+                              [ ".", "HTTPCode_Target_2XX_Count", ".", ".", ".", ".", ".", "." ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "setPeriodToTimeRange": true,
+                          "title": "ALB-ResponseCode-By-AZ"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 0,
+                      "x": 12,
+                      "type": "metric",
+                      "properties": {
+                          "view": "pie",
+                          "stacked": true,
+                          "metrics": [
+                              [ "AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", "${ApplicationELBTargetGroupNameSpace}", "LoadBalancer", "${ApplicationELBNameSpace}", "AvailabilityZone", "${ApplicationELBAZ2Name}" ],
+                              [ ".", "UnHealthyHostCount", ".", ".", ".", ".", ".", "${ApplicationELBAZ1Name}" ],
+                              [ ".", "HealthyHostCount", ".", ".", ".", ".", ".", "." ],
+                              [ ".", "UnHealthyHostCount", ".", ".", ".", ".", ".", "${ApplicationELBAZ2Name}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "setPeriodToTimeRange": true,
+                          "period": 300,
+                          "title": "ALB-HealthyUnhealthy-Host "
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 0,
+                      "x": 18,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "AWS/ApplicationELB", "RequestCountPerTarget", "TargetGroup", "${ApplicationELBTargetGroupNameSpace}", { "visible": false } ],
+                              [ ".", "TargetResponseTime", ".", ".", "LoadBalancer", "${ApplicationELBNameSpace}", "AvailabilityZone", "${ApplicationELBAZ2Name}" ],
+                              [ "...", "${ApplicationELBAZ1Name}" ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "ALB Response Time",
+                          "period": 300,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 12,
+                      "x": 0,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", "${RDSDBInstanceIdentifier}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "DB-CPU-Utilization"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 12,
+                      "x": 6,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", "${RDSDBInstanceIdentifier}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "DB-Connection-Stats"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 12,
+                      "x": 12,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/RDS", "FreeStorageSpace", "DBInstanceIdentifier", "${RDSDBInstanceIdentifier}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "DB-FreeStorageSpace"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 12,
+                      "x": 18,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/RDS", "FreeableMemory", "DBInstanceIdentifier", "${RDSDBInstanceIdentifier}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "period": 300,
+                          "title": "DB-Freeable-Memory"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 18,
+                      "x": 0,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "CpuReserved", "TaskDefinitionFamily", "omero-server", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "CpuUtilized", ".", ".", ".", "." ],
+                              [ ".", "MemoryReserved", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "StorageWriteBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryUtilized", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "StorageReadBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkRxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkTxBytes", ".", ".", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Omero-Server-Task-CPU-Utilization",
+                          "period": 300,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 18,
+                      "x": 12,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "CpuUtilized", "TaskDefinitionFamily", "omero-web", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "StorageWriteBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkRxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "CpuReserved", ".", ".", ".", "." ],
+                              [ ".", "EphemeralStorageReserved", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkTxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryReserved", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryUtilized", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "StorageReadBytes", ".", ".", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Omero-Web-Task-CPU",
+                          "period": 300,
+                          "setPeriodToTimeRange": true,
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "liveData": false,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 18,
+                      "x": 6,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "CpuReserved", "TaskDefinitionFamily", "omero-server", "ClusterName", "${ECSClusterName}", { "visible": false } ],
+                              [ ".", "CpuUtilized", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryReserved", ".", ".", ".", "." ],
+                              [ ".", "StorageWriteBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryUtilized", ".", ".", ".", "." ],
+                              [ ".", "StorageReadBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkRxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkTxBytes", ".", ".", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Omero-Server-Task-Memory",
+                          "period": 300,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 6,
+                      "y": 18,
+                      "x": 18,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "CpuUtilized", "TaskDefinitionFamily", "omero-web", "ClusterName", "${ECSClusterName}", { "visible": false } ],
+                              [ ".", "StorageWriteBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkRxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "CpuReserved", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "EphemeralStorageReserved", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "NetworkTxBytes", ".", ".", ".", ".", { "visible": false } ],
+                              [ ".", "MemoryReserved", ".", ".", ".", "." ],
+                              [ ".", "MemoryUtilized", ".", ".", ".", "." ],
+                              [ ".", "StorageReadBytes", ".", ".", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Omero-Web-Task-Memory",
+                          "period": 300,
+                          "setPeriodToTimeRange": true,
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "liveData": false,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 5,
+                      "width": 6,
+                      "y": 24,
+                      "x": 18,
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "CpuUtilized", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "CpuReserved", ".", "." ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Cluster-CPU"
+                      }
+                  },
+                  {
+                      "height": 5,
+                      "width": 6,
+                      "y": 24,
+                      "x": 12,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "MemoryReserved", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "MemoryUtilized", ".", "." ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Cluster-Memory",
+                          "period": 300,
+                          "stat": "Average"
+                      }
+                  },
+                  {
+                      "height": 5,
+                      "width": 6,
+                      "y": 24,
+                      "x": 0,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "ServiceCount", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "TaskCount", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "pie",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Cluster-Services",
+                          "period": 300,
+                          "stat": "Average",
+                          "setPeriodToTimeRange": true
+                      }
+                  },
+                  {
+                      "height": 5,
+                      "width": 6,
+                      "y": 24,
+                      "x": 6,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "ECS/ContainerInsights", "ServiceCount", "ClusterName", "${ECSClusterName}" ],
+                              [ ".", "TaskCount", ".", ".", { "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Cluster-Tasks",
+                          "period": 300,
+                          "stat": "Average",
+                          "setPeriodToTimeRange": true
+                      }
+                  }
+              ]
+          }'
+
+Outputs:
+  OmeroECSEC2Dashboard:
+    Description: "Omero Application CloudWatch Dashboard"
+    Condition: runContainerOnEC2
+    Value: !Sub |
+        https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home#dashboards:name=${EC2Dashboard}
+  OmeroECSFargateDashboard:
+    Description: "Omero Application CloudWatch Dashboard"
+    Condition: runContainerOnFargate
+    Value: !Sub |
+        https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home#dashboards:name=${FargateDashboard}

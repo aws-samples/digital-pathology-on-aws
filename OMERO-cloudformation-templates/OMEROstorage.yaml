@@ -252,6 +252,8 @@ Outputs:
     Value: !Ref OmeroSecurityGroup
   EFSSecurityGroup:
     Value: !Ref EFSSecurityGroup
+  RDSDBInstanceIdentifier:
+    Value: !Select [0, !Split [".", !GetAtt 'RDSInstance.Endpoint.Address']]
   RDSEndpointAddress:
     Value: !GetAtt 'RDSInstance.Endpoint.Address'
   RDSDatabaseSecret:
